@@ -21,6 +21,7 @@ from mcp.server.fastmcp import FastMCP
 
 from taproot_mcp.config import ClusterConfig
 from taproot_mcp.models import Envelope, error_result, make_envelope, ok_result
+from taproot_mcp.sessions import SessionManager
 from taproot_mcp.ssh_pool import SSHPool
 from taproot_mcp.targeting import resolve_target
 
@@ -37,6 +38,12 @@ TOOL_NAMES = [
     "cluster_service",
     "cluster_upload",
     "cluster_download",
+    "cluster_session_open",
+    "cluster_session_exec",
+    "cluster_session_read",
+    "cluster_session_interrupt",
+    "cluster_session_close",
+    "cluster_session_list",
 ]
 
 
@@ -48,6 +55,7 @@ class TaprootTools:
 
         self.config = config
         self.pool = pool or SSHPool(config)
+        self.sessions = SessionManager(config, self.pool)
 
     async def aclose(self) -> None:
         """Close network resources held by the tool handlers."""
@@ -458,6 +466,43 @@ class TaprootTools:
             return payload
 
         return await self._on_node_names(node_names, op)
+
+    async def cluster_session_open(self, node: str) -> Envelope:
+        """
+        在指定节点上打开一个持久 shell 会话(底层为 tmux),返回 session_id。
+
+        后续用 cluster_session_exec 在同一会话里执行命令,cd/export/source 等状态会保留。
+        node 必须是单个节点名,会话不支持广播。单条命令请优先用无状态 cluster_exec。
+        """
+
+        return await self.sessions.open(node)
+
+    async def cluster_session_exec(
+        self, session_id: str, command: str, timeout: int = 60
+    ) -> Envelope:
+        """在已打开的会话中执行命令,保留该会话的 shell 状态并返回 output 与 exit_code。"""
+
+        return await self.sessions.exec(session_id, command, timeout)
+
+    async def cluster_session_read(self, session_id: str, lines: int = 100) -> Envelope:
+        """读取会话当前的屏幕缓冲,用于查看流式/长时运行命令的最新输出。"""
+
+        return await self.sessions.read(session_id, lines)
+
+    async def cluster_session_interrupt(self, session_id: str) -> Envelope:
+        """向会话发送 Ctrl-C,用于中断正在运行的前台命令。"""
+
+        return await self.sessions.interrupt(session_id)
+
+    async def cluster_session_close(self, session_id: str) -> Envelope:
+        """关闭会话并释放远端资源。"""
+
+        return await self.sessions.close(session_id)
+
+    async def cluster_session_list(self) -> Envelope:
+        """列出当前所有打开的会话及其所在节点。"""
+
+        return await self.sessions.list()
 
     async def _on_targets(
         self, target: str, op: Callable[[str], Awaitable[dict[str, Any]]]

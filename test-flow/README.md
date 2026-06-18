@@ -10,7 +10,9 @@
 2. 本地 SSH 集成测试
    - `test_local_ssh_v01.py`: 使用 localhost SSH 模拟远端节点，覆盖 exec/read/write/edit/list/glob/upload/download/system_info 的主路径。
    - 不修改用户 SSH 配置；测试前请确认本机可执行 `ssh localhost true`。
-3. Codex MCP 手动烟测
+3. tmux 会话集成测试
+   - `test_local_tmux_v02.py`: 使用 localhost + tmux 验证 open/exec/read/interrupt/close/list，重点验证 `cd/export` 状态保留和 sentinel exit code。
+4. Codex MCP 手动烟测
    - `codex/config-snippet.toml`: Codex MCP 配置示例。
    - `scripts/codex_smoke.md`: 在 Codex 中调用 taproot 工具的手动验收步骤。
 
@@ -63,7 +65,7 @@ ${EDITOR:-vi} /tmp/taproot-nodes.localhost.yaml
 
 ```bash
 TAPROOT_TEST_CONFIG=/tmp/taproot-nodes.localhost.yaml \
-python -m pytest test-flow/tests/test_local_ssh_v01.py
+python -m pytest test-flow/tests/test_local_ssh_v01.py test-flow/tests/test_local_tmux_v02.py
 ```
 
 ## Codex MCP 烟测流程
@@ -84,5 +86,5 @@ taproot-mcp check --config /tmp/taproot-nodes.localhost.yaml
 
 - 单元测试全部通过。
 - localhost SSH 集成测试在可登录环境下全部通过。
-- Codex 能发现 taproot MCP server，并能完成 `cluster_system_info`、`cluster_exec`、`cluster_write_file/read_file/edit_file` 的烟测。
+- Codex 能发现 taproot MCP server，并能完成 `cluster_system_info`、`cluster_exec`、`cluster_write_file/read_file/edit_file`、`cluster_session_open/exec/close` 的烟测。
 - 故意配置一个不可达节点时，工具调用仍返回统一信封，失败只出现在对应节点条目中。

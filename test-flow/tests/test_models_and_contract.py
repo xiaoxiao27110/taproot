@@ -31,6 +31,12 @@ def test_tool_contract_has_prd_tools_and_target_docs() -> None:
         "cluster_service",
         "cluster_upload",
         "cluster_download",
+        "cluster_session_open",
+        "cluster_session_exec",
+        "cluster_session_read",
+        "cluster_session_interrupt",
+        "cluster_session_close",
+        "cluster_session_list",
     }
 
     actual = {
@@ -44,9 +50,12 @@ def test_tool_contract_has_prd_tools_and_target_docs() -> None:
     for name in expected:
         doc = inspect.getdoc(getattr(tools, name)) or ""
         assert doc
-        assert "target" in doc
-        assert "all" in doc
-        assert "tag:" in doc
+        if name.startswith("cluster_session_"):
+            assert "会话" in doc or "session" in doc
+        else:
+            assert "target" in doc
+            assert "all" in doc
+            assert "tag:" in doc
 
 
 def test_mcp_server_builds_with_registered_tools() -> None:

@@ -33,3 +33,11 @@
 ```
 
 期望：write/read/edit 都返回统一信封且 ok=true。
+
+5. 验证 tmux 会话：
+
+```text
+打开 local-vllm 会话，执行 "cd /tmp && export TAPROOT_SMOKE=ok"，再执行 "pwd; printf $TAPROOT_SMOKE"，最后关闭会话
+```
+
+期望：第二条会话命令能看到 `/tmp` 与 `ok`，证明状态保留。

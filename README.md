@@ -107,6 +107,15 @@ v0.1 stateless broadcast tools:
 - `cluster_upload`
 - `cluster_download`
 
+v0.2 single-node tmux session tools:
+
+- `cluster_session_open`
+- `cluster_session_exec`
+- `cluster_session_read`
+- `cluster_session_interrupt`
+- `cluster_session_close`
+- `cluster_session_list`
+
 All node-targeted tools return the same envelope shape:
 
 ```json
