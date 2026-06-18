@@ -1,0 +1,11 @@
+defaults:
+  port: 22
+  tags: [local]
+
+nodes:
+  local-vllm:
+    host: localhost
+    tags: [local, vllm, gpu]
+  local-build:
+    host: localhost
+    tags: [local, build]

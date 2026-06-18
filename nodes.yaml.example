@@ -1,0 +1,17 @@
+defaults:
+  user: admin
+  key: ~/.ssh/id_rsa
+  port: 22
+  # sudo_password: "xxxx"
+
+nodes:
+  gpu-node-1:
+    host: 192.168.1.101
+    tags: [gpu, h200, vllm]
+  gpu-node-2:
+    host: 192.168.1.102
+    tags: [gpu, h200, vllm]
+  dev-vm:
+    host: 192.168.1.200
+    user: dev
+    tags: [dev, build]

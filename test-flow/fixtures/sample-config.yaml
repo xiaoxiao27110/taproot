@@ -1,0 +1,5 @@
+service:
+  name: taproot-test
+  port: 8080
+node:
+  role: fixture
