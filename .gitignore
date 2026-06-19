@@ -6,7 +6,10 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+node_modules/
+out/
 build/
 dist/
+*.vsix
 nodes.yaml
 .DS_Store

@@ -1,0 +1,8 @@
+node_modules/
+src/
+test/
+out/test/
+**/*.map
+tsconfig.json
+Taproot VS Code Extension_副本.html
+taproot-vscode-*.vsix

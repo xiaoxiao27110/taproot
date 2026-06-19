@@ -1,0 +1,75 @@
+{
+  "name": "taproot-vscode",
+  "displayName": "Taproot",
+  "description": "Visual nodes.yaml editor and connection dashboard for taproot-mcp.",
+  "version": "0.1.0",
+  "publisher": "taproot",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "onCommand:taproot.openDashboard"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "taproot.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Taproot"
+      },
+      {
+        "command": "taproot.testConnections",
+        "title": "Test Connections",
+        "category": "Taproot"
+      }
+    ],
+    "configuration": {
+      "title": "Taproot",
+      "properties": {
+        "taproot.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to nodes.yaml. Empty uses workspace nodes.yaml, then ~/.config/taproot/nodes.yaml."
+        },
+        "taproot.taprootMcpCommand": {
+          "type": "string",
+          "default": "taproot-mcp",
+          "description": "Command used to run taproot-mcp for connection checks."
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "taproot.openDashboard"
+        },
+        {
+          "command": "taproot.testConnections"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test out/test/*.test.js",
+    "vscode:prepublish": "npm run compile"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.38",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/jsdom": "^28.0.3",
+    "@types/node": "^20.14.8",
+    "@types/vscode": "^1.90.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.5.4"
+  }
+}
