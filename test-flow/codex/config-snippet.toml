@@ -1,0 +1,4 @@
+[mcp_servers.taproot-local]
+command = "taproot-mcp"
+args = ["serve", "--config", "/tmp/taproot-nodes.localhost.yaml"]
+env = {}
