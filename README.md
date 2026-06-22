@@ -94,6 +94,10 @@ claude mcp add --transport http taproot http://localhost:8765/mcp
 
 ## Tools
 
+Discovery:
+
+- `cluster_nodes` returns the current node inventory from the running MCP server. MCP clients should use this instead of reading `nodes.yaml` directly.
+
 v0.1 stateless broadcast tools:
 
 - `cluster_exec`
@@ -129,6 +133,51 @@ All node-targeted tools return the same envelope shape:
 ```
 
 Single-node targets use the same envelope with one result entry.
+
+## Remote Safety Policy
+
+Taproot enforces remote permissions on the MCP server side. Local agent sandbox
+settings do not grant extra access on remote nodes.
+
+- Remote file paths are resolved against the SSH user's physical `$HOME`.
+  Relative paths and `~/...` stay inside that home directory by default.
+- Home-internal file tools run without approval, except protected directories
+  such as `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`, and
+  `~/.taproot`.
+- Paths outside home, `sudo=True`, `cluster_exec`, service mutations, and
+  `cluster_session_exec` require CLI approval before execution.
+- Pending approvals are stored beside the active config in `.taproot/approvals.json`.
+
+Approve or reject high-risk operations from a separate terminal:
+
+```bash
+taproot-mcp approvals list --config ./nodes.yaml --status pending
+taproot-mcp approvals approve <approval-id> --config ./nodes.yaml
+taproot-mcp approvals reject <approval-id> --config ./nodes.yaml
+```
+
+Backups for write/edit/upload operations are centralized on each remote node:
+
+```text
+~/.taproot/backups/<path_sha256>/<local-utc-timestamp>--<basename>
+```
+
+Taproot uses the MCP server's UTC clock for backup filenames and prunes backups
+per original path to the newest 300 entries and entries no older than 30 days.
+
+## Operation History
+
+Every node-targeted MCP tool call appends per-node JSONL events to:
+
+```text
+<nodes.yaml directory>/.taproot/history.jsonl
+```
+
+The history excludes password fields. `cluster_write_file` stores a bounded write-content preview for UI inspection. Inspect history with:
+
+```bash
+taproot-mcp history --config ./nodes.yaml --node gpu-node-1 --limit 50
+```
 
 ## Tests
 

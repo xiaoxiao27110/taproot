@@ -36,6 +36,22 @@ class SessionManager:
         self._sessions: dict[str, SessionRecord] = {}
         self._tmux_bins: dict[str, str] = {}
 
+    def update_config(self, config: ClusterConfig) -> None:
+        """Replace cluster config and forget sessions bound to the old node map."""
+
+        if config == self.config:
+            self.config = config
+            return
+        self.config = config
+        self._sessions.clear()
+        self._tmux_bins.clear()
+
+    def node_for_session(self, session_id: str) -> str | None:
+        """Return the node for a known in-memory session."""
+
+        record = self._sessions.get(session_id)
+        return record.node if record is not None else None
+
     async def open(self, node: str) -> dict[str, Any]:
         """Open a tmux-backed session on one node."""
 

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from typing import Sequence
 
+from taproot_mcp.approvals import ApprovalError, ApprovalStore
 from taproot_mcp.config import ConfigError, load_config
+from taproot_mcp.history import read_history
 from taproot_mcp.server import TaprootTools, build_mcp_server
 from taproot_mcp.ssh_pool import SSHPool
 
@@ -27,9 +30,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if namespace.command == "check":
             return asyncio.run(_check(namespace.config, namespace.timeout))
+        if namespace.command == "history":
+            return _history(namespace.config, namespace.node, namespace.limit)
+        if namespace.command == "approvals":
+            return _approvals(namespace)
         return _serve(namespace.config, namespace.transport, namespace.host, namespace.port)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
+        return 2
+    except ApprovalError as exc:
+        print(f"approval error: {exc}", file=sys.stderr)
         return 2
 
 
@@ -54,6 +64,30 @@ def _build_parser() -> argparse.ArgumentParser:
     check.add_argument("--config", help="path to nodes.yaml")
     check.add_argument("--timeout", type=float, default=10.0, help="per-node SSH timeout")
 
+    history = subparsers.add_parser("history", help="print recent MCP operation history")
+    history.add_argument("--config", help="path to nodes.yaml")
+    history.add_argument("--node", help="only include one node")
+    history.add_argument("--limit", type=int, default=100, help="maximum events to print")
+
+    approvals = subparsers.add_parser("approvals", help="manage pending operation approvals")
+    approval_subparsers = approvals.add_subparsers(dest="approval_command", required=True)
+
+    approvals_list = approval_subparsers.add_parser("list", help="list approvals")
+    approvals_list.add_argument("--config", help="path to nodes.yaml")
+    approvals_list.add_argument(
+        "--status",
+        choices=["pending", "approved", "rejected", "consumed"],
+        help="only show approvals with this status",
+    )
+
+    approvals_approve = approval_subparsers.add_parser("approve", help="approve one pending operation")
+    approvals_approve.add_argument("--config", help="path to nodes.yaml")
+    approvals_approve.add_argument("id", help="approval id")
+
+    approvals_reject = approval_subparsers.add_parser("reject", help="reject one pending operation")
+    approvals_reject.add_argument("--config", help="path to nodes.yaml")
+    approvals_reject.add_argument("id", help="approval id")
+
     return parser
 
 
@@ -64,6 +98,31 @@ def _serve(config_path: str | None, transport: str, host: str, port: int) -> int
     tools = TaprootTools(config)
     server = build_mcp_server(tools, host=host, port=port)
     server.run(transport="streamable-http" if transport == "http" else "stdio")
+    return 0
+
+
+def _history(config_path: str | None, node: str | None, limit: int) -> int:
+    """Print recent MCP operation history as JSON."""
+
+    config = load_config(config_path)
+    print(json.dumps(read_history(config, node=node, limit=max(1, limit)), ensure_ascii=False))
+    return 0
+
+
+def _approvals(namespace: argparse.Namespace) -> int:
+    """Manage local approval records."""
+
+    config = load_config(namespace.config)
+    store = ApprovalStore(config)
+    if namespace.approval_command == "list":
+        payload = store.list(status=namespace.status)
+    elif namespace.approval_command == "approve":
+        payload = store.approve(namespace.id)
+    elif namespace.approval_command == "reject":
+        payload = store.reject(namespace.id)
+    else:
+        raise ApprovalError(f"unknown approvals command: {namespace.approval_command}")
+    print(json.dumps(payload, ensure_ascii=False))
     return 0
 
 

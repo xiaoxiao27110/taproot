@@ -44,7 +44,7 @@ def ok_result(**fields: Any) -> dict[str, Any]:
     return {"ok": True, **fields}
 
 
-def error_result(error: str) -> dict[str, Any]:
+def error_result(error: str, **fields: Any) -> dict[str, Any]:
     """Build a failed per-node result."""
 
-    return {"ok": False, "error": error}
+    return {"ok": False, "error": error, **fields}
