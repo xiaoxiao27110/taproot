@@ -1436,17 +1436,15 @@ h1 {
   flex-wrap: wrap;
   gap: 7px;
   align-items: center;
-  color: var(--fg);
-  font-weight: 600;
 }
 
-.activity-kind {
+.activity-title-label {
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--chip-bg);
   color: var(--chip-fg);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .activity-fail {

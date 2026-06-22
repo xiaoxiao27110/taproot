@@ -167,10 +167,11 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.doesNotMatch(dom.window.document.body.textContent || '', /Host \/ IP/);
   assert.match(dom.window.document.body.textContent || '', /执行 bash: nvidia-smi -L/);
   assert.doesNotMatch(dom.window.document.body.textContent || '', /cluster_(exec|read_file|write_file)/);
-  assert.match(dom.window.document.body.textContent || '', /命令执行/);
+  assert.equal(dom.window.document.querySelector('.activity-kind'), null);
+  assert(dom.window.document.querySelector('.activity-title-label'));
   const gpuActivities = [...dom.window.document.querySelectorAll<HTMLElement>('[data-detail-node="gpu-node-1"] .activity-title')].map((item) => item.textContent || '');
   assert.match(gpuActivities[0], /写入文件: 1\.txt/);
-  assert.match(gpuActivities[0], /文件写入/);
+  assert.doesNotMatch(gpuActivities[0], /文件写入/);
   assert(gpuActivities.findIndex((item) => item.includes('写入文件: 1.txt')) < gpuActivities.findIndex((item) => item.includes('读取文件: 1.txt')));
   assert.doesNotMatch(dom.window.document.querySelector('[data-detail-node="gpu-node-1"]')?.textContent || '', /写入内容/);
   click(dom, '[data-activity-id="mock-write-1"] .activity-summary');

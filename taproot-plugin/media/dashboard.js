@@ -1076,13 +1076,12 @@
     const meta = activityMeta(item.action);
     const detail = activityDetail(item);
     const open = !!state.activityOpen[item.id];
-    const kind = activityKindLabel(item);
     return `
       <article class="activity-item ${item.ok ? '' : 'failed'} ${open ? 'open' : ''}" data-activity-id="${escAttr(item.id)}">
         <button class="activity-summary" data-action="toggleActivity" data-id="${escAttr(item.id)}">
           <span class="codicon ${meta.icon} activity-icon ${meta.tone}"></span>
           <span class="activity-copy">
-            <span class="activity-title"><span>${esc(activityTitle(item))}</span>${kind ? `<span class="activity-kind">${esc(kind)}</span>` : ''}${item.ok ? '' : '<span class="activity-fail">失败</span>'}</span>
+            <span class="activity-title"><span class="activity-title-label">${esc(activityTitle(item))}</span>${item.ok ? '' : '<span class="activity-fail">失败</span>'}</span>
             ${detail ? `<span class="activity-detail">${esc(detail)}</span>` : ''}
           </span>
           <time class="activity-time">${esc(formatActivityTime(item.timestamp))}</time>
