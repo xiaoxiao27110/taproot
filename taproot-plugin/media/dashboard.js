@@ -16,6 +16,7 @@
   const app = document.getElementById('app');
   let state = hydrate(vscode.getState && vscode.getState());
   let toastTimer = 0;
+  let revealNodeId = 0;
   let focusNodeId = 0;
   let tabTransition = null;
 
@@ -168,10 +169,16 @@
     }
     if (message.type === 'selectNode') {
       const nodeName = message.nodeName || '';
-      if (state && state.nodes.some((node) => node.name === nodeName)) {
-        state.selected = nodeName;
-        setView('detail');
-        state.detailOpen[nodeName] = true;
+      const node = state && findNode(nodeName);
+      if (state && node) {
+        state.selected = node.name;
+        if (message.view === 'config') {
+          setView('config');
+          openConfigNode(node, { reveal: true, collapseOthers: true });
+        } else {
+          setView('detail');
+          state.detailOpen[node.name] = true;
+        }
         state.showFilter = false;
         state.ctx = null;
         persist();
@@ -182,6 +189,7 @@
     if (message.type === 'showConfig') {
       if (state) {
         setView('config');
+        ensureConfigSelectionOpen();
         state.ctx = null;
         persist();
         render();
@@ -407,7 +415,10 @@
       case 'openConfig':
       case 'showConfig':
         setView('config');
-        ensureConfigSelectionOpen();
+        ensureConfigSelectionOpen(action === 'openConfig' ? actionNode(el) : undefined, {
+          reveal: action === 'openConfig',
+          collapseOthers: action === 'openConfig',
+        });
         state.ctx = null;
         render();
         break;
@@ -534,12 +545,28 @@
     return el.getAttribute('data-node') || state.selected;
   }
 
-  function ensureConfigSelectionOpen() {
-    const node = selectedNode() || state.nodes[0];
+  function ensureConfigSelectionOpen(nodeName, options = {}) {
+    const node = (nodeName && findNode(nodeName)) || selectedNode() || state.nodes[0];
     if (!node) {
       return;
     }
+    openConfigNode(node, options);
+  }
+
+  function openConfigNode(node, options = {}) {
+    state.selected = node.name;
+    if (options.collapseOthers) {
+      for (const item of state.nodes) {
+        state.configOpen[item.id] = false;
+      }
+    }
     state.configOpen[node.id] = true;
+    if (options.reveal) {
+      revealNodeId = node.id;
+    }
+    if (options.focus) {
+      focusNodeId = node.id;
+    }
   }
 
   function setAllDetailNodesOpen(open) {
@@ -719,15 +746,17 @@
         nextContent.scrollTop = previousScrollTop;
       }
     }
-    focusPendingNodeCard();
+    revealPendingNodeCard();
   }
 
-  function focusPendingNodeCard() {
-    if (!focusNodeId) {
+  function revealPendingNodeCard() {
+    const id = focusNodeId || revealNodeId;
+    const shouldFocus = !!focusNodeId;
+    focusNodeId = 0;
+    revealNodeId = 0;
+    if (!id) {
       return;
     }
-    const id = focusNodeId;
-    focusNodeId = 0;
     setTimeout(() => {
       const card = app && app.querySelector(`[data-node-card-id="${id}"]`);
       if (!card) {
@@ -735,6 +764,9 @@
       }
       if (typeof card.scrollIntoView === 'function') {
         card.scrollIntoView({ block: 'center', behavior: 'auto' });
+      }
+      if (!shouldFocus) {
+        return;
       }
       const input = card.querySelector('input[data-field="name"]') || card.querySelector('input');
       if (input && typeof input.focus === 'function') {
@@ -895,7 +927,6 @@
     if (!state.nodes.length) {
       return `<section class="detail-page"><h1>节点详情</h1><div class="subtitle">请先添加节点。</div></section>`;
     }
-    const activityCount = state.activities.length;
     const nodes = filteredDetailNodes();
     return `
       <section class="detail-page activity-page">
@@ -924,7 +955,10 @@
             ${(state.filterTag || state.detailQuery) ? '<button class="icon-action detail-clear" data-action="clearFilter" title="清空筛选"><span class="codicon codicon-close"></span></button>' : ''}
             ${state.showFilter ? renderDetailFilterMenu() : ''}
           </div>
-          <span class="detail-status-text" data-detail-count>${detailCountText(nodes, activityCount)}</span>
+          <button class="button secondary detail-refresh-button" data-action="refreshAll" title="刷新节点状态">
+            <span class="codicon codicon-refresh"></span>
+            <span>刷新</span>
+          </button>
         </div>
         <div class="detail-stack" data-detail-stack>
           ${nodes.length ? nodes.map(renderDetailNodePanel).join('') : renderDetailNoResults()}
@@ -951,11 +985,6 @@
     `;
   }
 
-  function detailCountText(nodes, activityCount = state.activities.length) {
-    const prefix = nodes.length === state.nodes.length ? `${state.nodes.length}` : `${nodes.length}/${state.nodes.length}`;
-    return `${prefix} 个节点 · ${activityCount} 条操作`;
-  }
-
   function renderDetailNoResults() {
     return `
       <div class="detail-empty-results">
@@ -967,14 +996,12 @@
 
   function replaceDetailResults() {
     const stack = app && app.querySelector('[data-detail-stack]');
-    const count = app && app.querySelector('[data-detail-count]');
-    if (!stack || !count) {
+    if (!stack) {
       render({ preserveScroll: true });
       return;
     }
     const nodes = filteredDetailNodes();
     stack.innerHTML = nodes.length ? nodes.map(renderDetailNodePanel).join('') : renderDetailNoResults();
-    count.textContent = detailCountText(nodes);
     if (!state.showFilter) {
       const menu = app && app.querySelector('.detail-filter-menu');
       if (menu) {
@@ -1049,12 +1076,13 @@
     const meta = activityMeta(item.action);
     const detail = activityDetail(item);
     const open = !!state.activityOpen[item.id];
+    const kind = activityKindLabel(item);
     return `
       <article class="activity-item ${item.ok ? '' : 'failed'} ${open ? 'open' : ''}" data-activity-id="${escAttr(item.id)}">
         <button class="activity-summary" data-action="toggleActivity" data-id="${escAttr(item.id)}">
           <span class="codicon ${meta.icon} activity-icon ${meta.tone}"></span>
           <span class="activity-copy">
-            <span class="activity-title"><span>${esc(item.summary)}</span><span class="activity-node">${esc(item.tool)}</span>${item.ok ? '' : '<span class="activity-fail">失败</span>'}</span>
+            <span class="activity-title"><span>${esc(activityTitle(item))}</span>${kind ? `<span class="activity-kind">${esc(kind)}</span>` : ''}${item.ok ? '' : '<span class="activity-fail">失败</span>'}</span>
             ${detail ? `<span class="activity-detail">${esc(detail)}</span>` : ''}
           </span>
           <time class="activity-time">${esc(formatActivityTime(item.timestamp))}</time>
@@ -1063,6 +1091,56 @@
         ${open ? renderActivityExpanded(item) : ''}
       </article>
     `;
+  }
+
+  function activityTitle(item) {
+    const summary = (item.summary || '').trim();
+    if (summary && !isBackendToolName(summary)) {
+      return summary.replace(/\bcluster_[a-z0-9_]+\b/ig, activityKindLabel(item) || '操作');
+    }
+    return activityKindLabel(item) || '操作';
+  }
+
+  function activityKindLabel(item) {
+    const byTool = {
+      cluster_exec: '命令执行',
+      cluster_read_file: '文件读取',
+      cluster_edit_file: '文件编辑',
+      cluster_write_file: '文件写入',
+      cluster_list_dir: '目录查看',
+      cluster_glob: '文件查找',
+      cluster_system_info: '系统信息',
+      cluster_service: '服务管理',
+      cluster_upload: '文件上传',
+      cluster_download: '文件下载',
+      cluster_session_open: '会话打开',
+      cluster_session_exec: '会话命令',
+      cluster_session_read: '会话读取',
+      cluster_session_interrupt: '会话中断',
+      cluster_session_close: '会话关闭',
+    };
+    if (byTool[item.tool]) {
+      return byTool[item.tool];
+    }
+    return {
+      exec: '命令执行',
+      read: '读取',
+      edit: '编辑',
+      write: '写入',
+      list: '目录查看',
+      glob: '文件查找',
+      system: '系统信息',
+      service: '服务管理',
+      upload: '文件上传',
+      download: '文件下载',
+      interrupt: '中断',
+      session: '会话',
+      operation: '操作',
+    }[item.action] || '';
+  }
+
+  function isBackendToolName(value) {
+    return /^cluster_[a-z0-9_]+$/i.test(value);
   }
 
   function renderActivityExpanded(item) {

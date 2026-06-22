@@ -45,6 +45,10 @@ test('dashboard webview renders as a real extension surface and supports core in
     resources: 'usable',
     pretendToBeVisual: true,
   });
+  const scrolledCards: string[] = [];
+  dom.window.HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+    scrolledCards.push(this.dataset.nodeCardId || '');
+  };
   const postedMessages: Array<{ type?: string; nodeName?: string; state?: any }> = [];
   const originalLog = dom.window.console.log.bind(dom.window.console);
   dom.window.console.log = (...args: unknown[]) => {
@@ -94,10 +98,12 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert(dom.window.document.querySelector('[data-action="toggleFilter"]'));
   assert.match(dom.window.document.querySelector('[data-action="expandAllDetailNodes"]')?.textContent || '', /全部展开/);
   assert.match(dom.window.document.querySelector('[data-action="collapseAllDetailNodes"]')?.textContent || '', /全部折叠/);
+  assert.equal(dom.window.document.querySelector('[data-detail-count]'), null);
+  assert.match(dom.window.document.querySelector('[data-action="refreshAll"]')?.textContent || '', /刷新/);
   detailSearch.value = 'dev';
   detailSearch.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   assert.equal(dom.window.document.querySelectorAll('[data-detail-node]').length, 1);
-  assert.match(dom.window.document.body.textContent || '', /1\/4 个节点/);
+  assert.match(dom.window.document.querySelector('[data-action="refreshAll"]')?.textContent || '', /刷新/);
   assert.match(dom.window.document.body.textContent || '', /dev-vm/);
   detailSearch.value = '';
   detailSearch.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
@@ -106,7 +112,7 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert(dom.window.document.querySelector('.detail-filter-menu'));
   clickByText(dom, '.detail-filter-menu .filter-option', 'vllm');
   assert.equal(dom.window.document.querySelectorAll('[data-detail-node]').length, 3);
-  assert.match(dom.window.document.body.textContent || '', /3\/4 个节点/);
+  assert.equal(dom.window.document.querySelector('[data-detail-count]'), null);
   click(dom, '[data-action="clearFilter"]');
   assert.equal(dom.window.document.querySelectorAll('[data-detail-node]').length, 4);
   assert.match(dom.window.document.querySelector('[data-detail-node="gpu-node-1"]')?.textContent || '', /192\.168\.1\.101/);
@@ -160,9 +166,11 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.equal(dom.window.document.querySelector('.info-grid'), null);
   assert.doesNotMatch(dom.window.document.body.textContent || '', /Host \/ IP/);
   assert.match(dom.window.document.body.textContent || '', /执行 bash: nvidia-smi -L/);
-  assert.match(dom.window.document.body.textContent || '', /cluster_exec/);
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /cluster_(exec|read_file|write_file)/);
+  assert.match(dom.window.document.body.textContent || '', /命令执行/);
   const gpuActivities = [...dom.window.document.querySelectorAll<HTMLElement>('[data-detail-node="gpu-node-1"] .activity-title')].map((item) => item.textContent || '');
   assert.match(gpuActivities[0], /写入文件: 1\.txt/);
+  assert.match(gpuActivities[0], /文件写入/);
   assert(gpuActivities.findIndex((item) => item.includes('写入文件: 1.txt')) < gpuActivities.findIndex((item) => item.includes('读取文件: 1.txt')));
   assert.doesNotMatch(dom.window.document.querySelector('[data-detail-node="gpu-node-1"]')?.textContent || '', /写入内容/);
   click(dom, '[data-activity-id="mock-write-1"] .activity-summary');
@@ -196,12 +204,27 @@ test('dashboard webview renders as a real extension surface and supports core in
   clickByText(dom, '.menu-item', '复制 SSH 命令');
   await waitFor(() => (dom.window.document.body.textContent || '').includes('已复制 SSH 命令'));
 
-  click(dom, '[data-action="showConfig"]');
-  await waitFor(() => (dom.window.document.body.textContent || '').includes('节点配置编辑器'));
+  const connectionMessagesBefore = postedMessages.filter((item) => item.type === 'testConnections').length;
+  click(dom, '[data-action="refreshAll"]');
+  await waitFor(() => postedMessages.filter((item) => item.type === 'testConnections').length > connectionMessagesBefore);
+  const refreshAllMessage = [...postedMessages].reverse().find((item) => item.type === 'testConnections');
+  assert(refreshAllMessage);
+  assert(refreshAllMessage.state?.nodes.every((node: { status: string }) => node.status === 'checking'));
+  await waitFor(() => (dom.window.document.body.textContent || '').includes('测试完成：成功'));
+
+  scrolledCards.length = 0;
+  sendWebviewMessage(dom, { type: 'selectNode', nodeName: 'dev-vm', view: 'config' });
+  await waitFor(() => (dom.window.document.body.textContent || '').includes('节点配置编辑器') && scrolledCards.includes('4'));
   const configTabs = dom.window.document.querySelector<HTMLElement>('.tabs');
   assert(configTabs);
   assert.equal(configTabs.dataset.view, 'config');
   assert.equal(configTabs.dataset.transition, 'detail-config');
+  const selectedConfigCard = dom.window.document.querySelector<HTMLElement>('[data-node-card-id="4"]');
+  assert(selectedConfigCard);
+  assert(selectedConfigCard.classList.contains('open'));
+  assert.equal(dom.window.document.querySelectorAll('.node-card.open').length, 1);
+  assert(dom.window.document.querySelector<HTMLElement>('[data-node-card-id="1"]')?.classList.contains('collapsed'));
+  assert(dom.window.document.querySelector<HTMLInputElement>('input[data-bind="node"][data-id="4"][data-field="host"]'));
   assert(dom.window.document.querySelector('.content.view-transition'));
   const configTab = dom.window.document.querySelector<HTMLElement>('[data-action="showConfig"]');
   assert(configTab);
@@ -257,6 +280,8 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.equal(configContentAfterClose.scrollTop, 91);
   assert.equal(dom.window.document.querySelector<HTMLInputElement>('input[data-bind="node"][data-id="2"][data-field="host"]'), null);
 
+  click(dom, '[data-action="toggleConfigNode"][data-id="1"]');
+  assert(dom.window.document.querySelector<HTMLElement>('[data-node-card-id="1"]')?.classList.contains('open'));
   const firstHost = dom.window.document.querySelector<HTMLInputElement>('input[data-bind="node"][data-id="1"][data-field="host"]');
   assert(firstHost);
   firstHost.click();

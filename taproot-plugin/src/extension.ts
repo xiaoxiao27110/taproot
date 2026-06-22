@@ -23,6 +23,7 @@ interface WebviewMessage {
   state?: DashboardState;
   nodeName?: string;
   command?: string;
+  view?: 'config' | 'detail';
 }
 
 interface TaprootTreeNode {
@@ -44,8 +45,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const nodeName = typeof item === 'string' ? item : item?.nodeName;
       return dashboard.open(nodeName);
     }),
-    vscode.commands.registerCommand('taproot.openConfig', () => {
-      return dashboard.openConfig();
+    vscode.commands.registerCommand('taproot.openConfig', (item?: TaprootTreeNode | string) => {
+      const nodeName = typeof item === 'string' ? item : item?.nodeName;
+      return dashboard.openConfig(nodeName);
     }),
     vscode.commands.registerCommand('taproot.testConnections', async () => {
       await dashboard.testActiveState();
@@ -155,9 +157,9 @@ class TaprootDashboard {
     await this.runConnectionCheck(state);
   }
 
-  async openConfig(): Promise<void> {
+  async openConfig(nodeName?: string): Promise<void> {
     this.pendingView = 'config';
-    await this.open();
+    await this.open(nodeName);
   }
 
   async reloadState(): Promise<DashboardState> {
@@ -333,7 +335,12 @@ class TaprootDashboard {
           ? { ...node, status: 'online' as const, error: undefined }
           : { ...node, status: 'error' as const, error: status.error || '连接失败' };
       });
-      const checked = { ...state, nodes, backend: await this.checkBackend() };
+      const checked = {
+        ...state,
+        nodes,
+        backend: await this.checkBackend(),
+        activities: await this.loadHistory(state.configPath),
+      };
       this.lastState = checked;
       if (options.silent) {
         this.post({ type: 'statusUpdate', state: checked });
@@ -442,8 +449,12 @@ class TaprootDashboard {
     if (!this.pendingNodeName) {
       return;
     }
-    this.post({ type: 'selectNode', nodeName: this.pendingNodeName });
+    const view = this.pendingView === 'config' ? 'config' : undefined;
+    this.post({ type: 'selectNode', nodeName: this.pendingNodeName, view });
     this.pendingNodeName = undefined;
+    if (view) {
+      this.pendingView = undefined;
+    }
   }
 
   private flushPendingView(): void {
@@ -576,8 +587,8 @@ class TaprootNodeItem extends vscode.TreeItem implements TaprootTreeNode {
     ].filter(Boolean).join('\n');
     this.iconPath = statusThemeIcon(node.status);
     this.command = {
-      command: 'taproot.openDashboard',
-      title: 'Open Taproot Dashboard',
+      command: 'taproot.openConfig',
+      title: 'Edit Taproot Node Config',
       arguments: [node.name],
     };
   }

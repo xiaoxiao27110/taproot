@@ -20,6 +20,15 @@ class SSHPool:
         self.connect_timeout = connect_timeout
         self._connections: dict[str, asyncssh.SSHClientConnection] = {}
 
+    async def update_config(self, config: ClusterConfig) -> None:
+        """Replace cluster config and drop connections created from the old config."""
+
+        if config == self.config:
+            self.config = config
+            return
+        await self.close()
+        self.config = config
+
     async def close(self) -> None:
         """Close all cached SSH connections."""
 

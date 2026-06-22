@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.vscode-test/
 .venv/
 venv/
 node_modules/
@@ -12,4 +13,5 @@ build/
 dist/
 *.vsix
 nodes.yaml
+.taproot/
 .DS_Store

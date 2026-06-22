@@ -1192,10 +1192,18 @@ h1 {
   margin-left: 4px;
 }
 
-.detail-status-text {
-  color: var(--fg-muted);
-  font-size: 12px;
+.detail-refresh-button {
+  height: 32px;
   white-space: nowrap;
+}
+
+.detail-refresh-button .codicon {
+  font-size: 13px;
+}
+
+.detail-refresh-button:disabled {
+  opacity: .65;
+  cursor: default;
 }
 
 .activity-head {
@@ -1236,7 +1244,13 @@ h1 {
   background: var(--panel-bg);
 }
 
+.detail-node.open {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--card-border));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .detail-node-head {
+  position: relative;
   width: 100%;
   min-height: 56px;
   display: grid;
@@ -1252,8 +1266,27 @@ h1 {
   cursor: pointer;
 }
 
+.detail-node-head::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: transparent;
+}
+
 .detail-node-head:hover {
   background: var(--list-hover);
+}
+
+.detail-node.open .detail-node-head {
+  border-bottom: 1px solid var(--divider);
+  background: color-mix(in srgb, var(--card-bg) 90%, var(--accent));
+}
+
+.detail-node.open .detail-node-head::before {
+  background: var(--accent);
 }
 
 .detail-node-main {
@@ -1305,21 +1338,21 @@ h1 {
 }
 
 .detail-node-body {
-  padding: 12px;
-  border-top: 1px solid var(--card-border);
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--divider);
+  background: color-mix(in srgb, var(--panel-bg) 76%, var(--editor-bg));
 }
 
 .activity-list {
   overflow: hidden;
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  background: var(--panel-bg);
+  margin-left: 34px;
+  background: transparent;
 }
 
 .activity-item {
   min-width: 0;
-  border-top: 1px solid var(--card-border);
-  background: var(--card-bg);
+  border-top: 1px solid var(--divider);
+  background: transparent;
 }
 
 .activity-item:first-child {
@@ -1327,17 +1360,18 @@ h1 {
 }
 
 .activity-item.failed {
-  background: color-mix(in srgb, var(--red) 6%, var(--card-bg));
+  background: color-mix(in srgb, var(--red) 6%, transparent);
 }
 
 .activity-summary {
+  position: relative;
   width: 100%;
   min-width: 0;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: start;
-  padding: 12px 14px;
+  padding: 12px 14px 12px 16px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1346,8 +1380,23 @@ h1 {
   cursor: pointer;
 }
 
+.activity-summary::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 42%, var(--divider));
+}
+
+.activity-item.failed .activity-summary::before {
+  background: color-mix(in srgb, var(--red) 70%, var(--divider));
+}
+
 .activity-summary:hover {
-  background: var(--list-hover);
+  background: color-mix(in srgb, var(--list-hover) 72%, transparent);
 }
 
 .activity-icon {
@@ -1391,7 +1440,7 @@ h1 {
   font-weight: 600;
 }
 
-.activity-node {
+.activity-kind {
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--chip-bg);
@@ -1428,7 +1477,7 @@ h1 {
 .activity-expanded {
   display: grid;
   gap: 10px;
-  padding: 0 14px 14px 54px;
+  padding: 0 14px 14px 56px;
 }
 
 .activity-expanded-grid {
@@ -1477,14 +1526,14 @@ h1 {
 }
 
 .activity-empty {
-  min-height: 180px;
+  min-height: 128px;
+  padding: 28px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1.5px dashed var(--card-border);
-  border-radius: 8px;
+  border: 0;
   color: var(--fg-muted);
 }
 
@@ -1756,6 +1805,10 @@ h1 {
     grid-template-columns: 28px minmax(0, 1fr) auto;
   }
 
+  .activity-list {
+    margin-left: 18px;
+  }
+
   .activity-time {
     grid-column: 2;
   }
@@ -1766,7 +1819,7 @@ h1 {
   }
 
   .activity-expanded {
-    padding-left: 54px;
+    padding-left: 56px;
   }
 
 }
