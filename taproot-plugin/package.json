@@ -2,7 +2,7 @@
   "name": "taproot-vscode",
   "displayName": "Taproot",
   "description": "Visual nodes.yaml editor and connection dashboard for taproot-mcp.",
-  "version": "0.1.0",
+  "version": "0.1.42",
   "publisher": "taproot",
   "license": "MIT",
   "engines": {
@@ -13,7 +13,13 @@
   ],
   "main": "./out/src/extension.js",
   "activationEvents": [
-    "onCommand:taproot.openDashboard"
+    "onView:taproot.nodes",
+    "onCommand:taproot.openDashboard",
+    "onCommand:taproot.openConfig",
+    "onCommand:taproot.testConnections",
+    "onCommand:taproot.refreshNodes",
+    "onCommand:taproot.openNodeTerminal",
+    "onCommand:taproot.copyNodeSsh"
   ],
   "contributes": {
     "commands": [
@@ -23,11 +29,62 @@
         "category": "Taproot"
       },
       {
+        "command": "taproot.openConfig",
+        "title": "Edit Config",
+        "category": "Taproot",
+        "icon": "$(settings)"
+      },
+      {
         "command": "taproot.testConnections",
         "title": "Test Connections",
-        "category": "Taproot"
+        "category": "Taproot",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "taproot.refreshNodes",
+        "title": "Refresh Nodes",
+        "category": "Taproot",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "taproot.openNodeTerminal",
+        "title": "Open SSH Terminal",
+        "category": "Taproot",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "taproot.copyNodeSsh",
+        "title": "Copy SSH Command",
+        "category": "Taproot",
+        "icon": "$(copy)"
       }
     ],
+    "icons": {
+      "taproot-root": {
+        "description": "Taproot root icon",
+        "default": {
+          "fontPath": "./media/taproot-icons.woff",
+          "fontCharacter": "\\F101"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "taproot",
+          "title": "Taproot",
+          "icon": "media/taproot.svg"
+        }
+      ]
+    },
+    "views": {
+      "taproot": [
+        {
+          "id": "taproot.nodes",
+          "name": "Nodes"
+        }
+      ]
+    },
     "configuration": {
       "title": "Taproot",
       "properties": {
@@ -40,6 +97,12 @@
           "type": "string",
           "default": "taproot-mcp",
           "description": "Command used to run taproot-mcp for connection checks."
+        },
+        "taproot.statusPollIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "description": "Interval for background node status polling in seconds. Set to 0 to disable polling."
         }
       }
     },
@@ -49,7 +112,37 @@
           "command": "taproot.openDashboard"
         },
         {
+          "command": "taproot.openConfig"
+        },
+        {
           "command": "taproot.testConnections"
+        },
+        {
+          "command": "taproot.refreshNodes"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "taproot.openConfig",
+          "when": "view == taproot.nodes",
+          "group": "navigation@2"
+        },
+        {
+          "command": "taproot.refreshNodes",
+          "when": "view == taproot.nodes",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "taproot.openNodeTerminal",
+          "when": "view == taproot.nodes && viewItem == taprootNode",
+          "group": "inline@1"
+        },
+        {
+          "command": "taproot.copyNodeSsh",
+          "when": "view == taproot.nodes && viewItem == taprootNode",
+          "group": "inline@2"
         }
       ]
     }
@@ -58,6 +151,9 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test out/test/*.test.js",
+    "test:vscode": "npm run compile && node test/vscode-smoke/run.js",
+    "package:vsix": "npm run compile && npm exec -- vsce package --dependencies && npm run verify:vsix",
+    "verify:vsix": "node test/verify-vsix.js",
     "vscode:prepublish": "npm run compile"
   },
   "dependencies": {
@@ -69,6 +165,7 @@
     "@types/jsdom": "^28.0.3",
     "@types/node": "^20.14.8",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^3.0.0",
     "jsdom": "^29.1.1",
     "typescript": "^5.5.4"
   }

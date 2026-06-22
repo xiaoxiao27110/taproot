@@ -4,7 +4,9 @@ import test from 'node:test';
 import {
   DashboardState,
   makeSshCommand,
+  makeSshpassCommand,
   parseNodesYaml,
+  resolveSshConnection,
   serializeNodesYaml,
   validateState,
 } from '../src/configModel';
@@ -43,6 +45,7 @@ nodes:
   assert.equal(state.nodes[1].user, 'deploy');
   assert.equal(state.nodes[1].pwd, 'pw');
   assert.equal(state.nodes[1].extra.key, '~/.ssh/dev');
+  assert.deepEqual(state.activities, []);
 });
 
 test('serializeNodesYaml omits inherited empty overrides but keeps key extras', () => {
@@ -73,6 +76,29 @@ nodes:
   assert.doesNotMatch(yaml, /gpu-node-1:\n(?:.*\n)*?\s+user:/);
 });
 
+test('parseNodesYaml applies defaults.host to nodes for UI validation', () => {
+  const state = parseNodesYaml(
+    `
+defaults:
+  host: 192.168.31.51
+  user: taproot
+  port: 2222
+nodes:
+  docker-node-01:
+    tags: [docker]
+`,
+    '/tmp/nodes.yaml',
+    backend,
+  );
+
+  assert.equal(state.nodes[0].host, '192.168.31.51');
+  assert.equal(validateState(state).ok, true);
+
+  const yaml = serializeNodesYaml(state);
+  assert.match(yaml, /docker-node-01:/);
+  assert.match(yaml, /host: 192\.168\.31\.51/);
+});
+
 test('validateState catches duplicate names and missing host', () => {
   const state: DashboardState = {
     configPath: '/tmp/nodes.yaml',
@@ -82,6 +108,7 @@ test('validateState catches duplicate names and missing host', () => {
       { id: 1, name: 'node-a', host: '', user: '', port: '', pwd: '', sudo: '', tags: [], status: 'inactive', extra: {} },
       { id: 2, name: 'node-a', host: 'localhost', user: '', port: 'bad', pwd: '', sudo: '', tags: [], status: 'inactive', extra: {} },
     ],
+    activities: [],
   };
 
   const result = validateState(state);
@@ -107,4 +134,29 @@ nodes:
   );
 
   assert.equal(makeSshCommand(state.defaults, state.nodes[0]), "ssh -p 22 'admin user@localhost'");
+});
+
+test('resolveSshConnection exposes password without printing it in sshpass command', () => {
+  const state = parseNodesYaml(
+    `
+defaults:
+  user: admin
+  port: 22
+  password: default-secret
+nodes:
+  local:
+    host: localhost
+    password: node-secret
+`,
+    '/tmp/nodes.yaml',
+    backend,
+  );
+
+  assert.deepEqual(resolveSshConnection(state.defaults, state.nodes[0]), {
+    port: '22',
+    destination: 'admin@localhost',
+    password: 'node-secret',
+  });
+  assert.equal(makeSshpassCommand(state.defaults, state.nodes[0]), 'sshpass -e ssh -p 22 admin@localhost');
+  assert.doesNotMatch(makeSshpassCommand(state.defaults, state.nodes[0]), /secret/);
 });

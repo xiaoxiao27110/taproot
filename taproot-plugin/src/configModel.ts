@@ -31,11 +31,24 @@ export interface BackendStatus {
   message: string;
 }
 
+export interface ActivityItem {
+  id: string;
+  timestamp: string;
+  node: string;
+  tool: string;
+  action: string;
+  ok: boolean;
+  summary: string;
+  detail: Record<string, unknown>;
+  error?: string;
+}
+
 export interface DashboardState {
   configPath: string;
   defaults: UiDefaults;
   nodes: UiNode[];
   backend: BackendStatus;
+  activities: ActivityItem[];
 }
 
 export interface ValidationResult {
@@ -51,7 +64,7 @@ const DEFAULTS: UiDefaults = {
   extra: {},
 };
 
-const DEFAULT_KEYS = new Set(['user', 'port', 'password', 'sudo_password']);
+const DEFAULT_KEYS = new Set(['host', 'user', 'port', 'password', 'sudo_password']);
 const NODE_KEYS = new Set(['host', 'user', 'port', 'password', 'sudo_password', 'tags']);
 
 export function expandHome(filePath: string): string {
@@ -89,7 +102,7 @@ export function parseNodesYaml(text: string, configPath: string, backend: Backen
     return {
       id: index + 1,
       name,
-      host: stringValue(node.host, ''),
+      host: stringValue(node.host, stringValue(rawDefaults.host, '')),
       user: stringValue(node.user, ''),
       port: stringValue(node.port, ''),
       pwd: stringValue(node.password, ''),
@@ -100,7 +113,7 @@ export function parseNodesYaml(text: string, configPath: string, backend: Backen
     };
   });
 
-  return { configPath, defaults, nodes, backend };
+  return { configPath, defaults, nodes, backend, activities: [] };
 }
 
 export function emptyState(configPath: string, backend: BackendStatus): DashboardState {
@@ -109,6 +122,7 @@ export function emptyState(configPath: string, backend: BackendStatus): Dashboar
     defaults: { ...DEFAULTS, extra: {} },
     nodes: [],
     backend,
+    activities: [],
   };
 }
 
@@ -175,10 +189,27 @@ export function validateState(state: DashboardState): ValidationResult {
 }
 
 export function makeSshCommand(defaults: UiDefaults, node: UiNode): string {
+  const connection = resolveSshConnection(defaults, node);
+  return `ssh -p ${shellQuote(connection.port)} ${shellQuote(connection.destination)}`;
+}
+
+export function makeSshpassCommand(defaults: UiDefaults, node: UiNode): string {
+  return `sshpass -e ${makeSshCommand(defaults, node)}`;
+}
+
+export function resolveSshConnection(defaults: UiDefaults, node: UiNode): {
+  port: string;
+  destination: string;
+  password: string;
+} {
   const user = node.user || defaults.user;
-  const port = node.port || defaults.port;
+  const port = node.port || defaults.port || '22';
   const destination = user ? `${user}@${node.host}` : node.host;
-  return `ssh -p ${shellQuote(port || '22')} ${shellQuote(destination)}`;
+  return {
+    port,
+    destination,
+    password: node.pwd || defaults.pwd || '',
+  };
 }
 
 export function stateForSerialization(state: DashboardState): DashboardState {
@@ -192,6 +223,7 @@ export function stateForSerialization(state: DashboardState): DashboardState {
       extra: node.extra ?? {},
     })),
     backend: state.backend,
+    activities: state.activities ?? [],
   };
 }
 
