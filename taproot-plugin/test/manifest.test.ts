@@ -18,12 +18,15 @@ test('extension manifest contributes a taproot-mcp activity bar view', async () 
   assert(manifest.activationEvents.includes('onCommand:taproot.openConfig'));
   assert(manifest.activationEvents.includes('onCommand:taproot.startServer'));
   assert(manifest.activationEvents.includes('onCommand:taproot.stopServer'));
+  assert(manifest.activationEvents.includes('onCommand:taproot.installBackend'));
   assert.equal(contributes.configuration.properties['taproot.statusPollIntervalSeconds'].default, 60);
   assert.equal(contributes.configuration.properties['taproot.httpHost'].default, '127.0.0.1');
   assert.equal(contributes.configuration.properties['taproot.httpPort'].default, 8765);
+  assert.equal(contributes.configuration.properties['taproot.pythonCommand'].default, '');
   assert(!contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.openDashboard'));
   assert(!contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.testConnections'));
   assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.openConfig'));
+  assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.installBackend'));
   assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.startServer'));
   assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.stopServer'));
   assert(contributes.menus['view/item/context'].some((item: { command: string }) => item.command === 'taproot.openNodeTerminal'));
@@ -40,6 +43,10 @@ test('extension manifest contributes a taproot-mcp activity bar view', async () 
   const currentStateBlock = extensionSource.match(/async currentState\(\): Promise<DashboardState> \{([\s\S]*?)\n  \}/)?.[1] || '';
   assert(!currentStateBlock.includes('scheduleAutoCheck'));
   assert(extensionSource.includes('dashboard.startStatusPolling();'));
+  assert(extensionSource.includes("registerCommand('taproot.installBackend'"));
+  assert(extensionSource.includes("case 'installBackend'"));
+  assert(extensionSource.includes("'pip'"));
+  assert(extensionSource.includes("'taproot-mcp'"));
   assert(extensionSource.includes("registerCommand('taproot.startServer'"));
   assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
   assert(extensionSource.includes("'--transport'"));

@@ -4,6 +4,7 @@ All notable changes to Taproot are documented here.
 
 ## 0.2.1 - 2026-06-23
 
+- Added a VS Code **Install/Update Backend** command and panel button for installing `taproot-mcp`.
 - Added VS Code extension commands to start and stop the local HTTP MCP server.
 - Fixed Remote-SSH extension placement by running the extension on the workspace side.
 - Simplified README and Marketplace quick start instructions.

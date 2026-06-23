@@ -191,6 +191,8 @@ input:focus {
 .header-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -1632,6 +1634,11 @@ h1 {
   color: var(--btn-fg);
   cursor: pointer;
   font-size: 13px;
+}
+
+.button.compact {
+  padding: 5px 9px;
+  font-size: 12px;
 }
 
 .button:hover {

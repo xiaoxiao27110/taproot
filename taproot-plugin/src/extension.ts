@@ -55,6 +55,7 @@ export function activate(context: vscode.ExtensionContext): void {
       treeProvider.refresh();
     }),
     vscode.commands.registerCommand('taproot.refreshNodes', () => dashboard.reloadState()),
+    vscode.commands.registerCommand('taproot.installBackend', () => dashboard.installBackend()),
     vscode.commands.registerCommand('taproot.startServer', () => dashboard.startHttpServer()),
     vscode.commands.registerCommand('taproot.stopServer', () => dashboard.stopHttpServer()),
     vscode.commands.registerCommand('taproot.openNodeTerminal', async (item?: TaprootTreeNode) => {
@@ -188,6 +189,45 @@ class TaprootDashboard {
     await this.copySsh(await this.loadState(), nodeName);
   }
 
+  async installBackend(): Promise<void> {
+    try {
+      const python = await resolvePythonCommand(this.pythonCommand());
+      let installedCommand = '';
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: '正在安装/更新 Taproot 后端',
+          cancellable: false,
+        },
+        async () => {
+          await runProcess(
+            python.command,
+            [...python.args, ...(await taprootInstallArgs(python))],
+            180_000,
+          );
+          installedCommand = await resolveInstalledTaprootCommand(python);
+        },
+      );
+
+      if (installedCommand) {
+        await this.configureTaprootCommand(installedCommand);
+      }
+
+      const state = await this.loadState();
+      await this.postState(state);
+      const message = installedCommand
+        ? `Taproot 后端已安装: ${installedCommand}`
+        : 'Taproot 后端已安装。如果面板仍然找不到 taproot-mcp，请设置 taproot.taprootMcpCommand。';
+      this.post({ type: 'backendInstalled', state, message });
+      this.stateEmitter.fire();
+      vscode.window.showInformationMessage(message);
+    } catch (error) {
+      const message = `Taproot 后端安装失败: ${formatError(error)}`;
+      this.post({ type: 'error', message });
+      vscode.window.showErrorMessage(message);
+    }
+  }
+
   async startHttpServer(): Promise<void> {
     if (this.serverProcess) {
       vscode.window.showInformationMessage(`Taproot MCP server is already running at ${this.serverUrl()}`);
@@ -287,6 +327,9 @@ class TaprootDashboard {
           if (this.lastState) {
             this.scheduleAutoCheck(this.lastState);
           }
+          break;
+        case 'installBackend':
+          await this.installBackend();
           break;
         case 'testConnections':
           await this.runConnectionCheck(requiredState(message));
@@ -587,6 +630,28 @@ class TaprootDashboard {
     return vscode.workspace.getConfiguration('taproot').get<string>('taprootMcpCommand')?.trim() || 'taproot-mcp';
   }
 
+  private pythonCommand(): string {
+    return vscode.workspace.getConfiguration('taproot').get<string>('pythonCommand')?.trim() || '';
+  }
+
+  private async configureTaprootCommand(commandPath: string): Promise<void> {
+    try {
+      await fs.access(commandPath);
+    } catch {
+      return;
+    }
+    const configuration = vscode.workspace.getConfiguration('taproot');
+    const configured = configuration.get<string>('taprootMcpCommand')?.trim();
+    if (configured && configured !== 'taproot-mcp') {
+      return;
+    }
+    const inspected = configuration.inspect<string>('taprootMcpCommand');
+    const target = inspected?.workspaceValue !== undefined || inspected?.workspaceFolderValue !== undefined
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await configuration.update('taprootMcpCommand', commandPath, target);
+  }
+
   private httpHost(): string {
     return vscode.workspace.getConfiguration('taproot').get<string>('httpHost')?.trim() || '127.0.0.1';
   }
@@ -688,6 +753,11 @@ class TaprootNodesProvider implements vscode.TreeDataProvider<TaprootTreeItem> {
 
 type TaprootTreeItem = TaprootNodeItem | TaprootMessageItem;
 
+interface CommandSpec {
+  command: string;
+  args: string[];
+}
+
 class TaprootNodeItem extends vscode.TreeItem implements TaprootTreeNode {
   readonly nodeName: string;
 
@@ -766,6 +836,98 @@ function runProcess(command: string, args: string[], timeoutMs: number): Promise
       }
     });
   });
+}
+
+async function resolvePythonCommand(configuredCommand: string): Promise<CommandSpec> {
+  const candidates = pythonCandidates(configuredCommand);
+  for (const candidate of candidates) {
+    try {
+      await runProcess(candidate.command, [...candidate.args, '-c', 'import sys; print(sys.executable)'], 10_000);
+      return candidate;
+    } catch {
+      // Try the next common Python launcher.
+    }
+  }
+  throw new Error('No Python command found. Install Python or set taproot.pythonCommand.');
+}
+
+async function taprootInstallArgs(python: CommandSpec): Promise<string[]> {
+  const args = ['-m', 'pip', 'install', '--upgrade'];
+  if (!(await pythonUsesVirtualEnv(python))) {
+    args.push('--user');
+  }
+  args.push('taproot-mcp');
+  return args;
+}
+
+async function pythonUsesVirtualEnv(python: CommandSpec): Promise<boolean> {
+  const code = 'import sys; print(int(getattr(sys, "base_prefix", sys.prefix) != sys.prefix))';
+  try {
+    const output = await runProcess(python.command, [...python.args, '-c', code], 10_000);
+    return output.stdout.trim().split(/\r?\n/).pop() === '1';
+  } catch {
+    return false;
+  }
+}
+
+function pythonCandidates(configuredCommand: string): CommandSpec[] {
+  const candidates: CommandSpec[] = [];
+  if (configuredCommand) {
+    candidates.push({ command: expandHome(configuredCommand), args: [] });
+  }
+  if (process.platform === 'win32') {
+    candidates.push({ command: 'py', args: ['-3'] });
+    candidates.push({ command: 'python', args: [] });
+    candidates.push({ command: 'python3', args: [] });
+  } else {
+    candidates.push({ command: 'python3', args: [] });
+    candidates.push({ command: 'python', args: [] });
+  }
+
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.command}\0${candidate.args.join('\0')}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+async function resolveInstalledTaprootCommand(python: CommandSpec): Promise<string> {
+  const code = [
+    'import os, shutil, site, sysconfig',
+    'name = "taproot-mcp.exe" if os.name == "nt" else "taproot-mcp"',
+    'candidates = []',
+    'found = shutil.which(name)',
+    'candidates.append(found)',
+    'schemes = [sysconfig.get_default_scheme(), f"{os.name}_user"]',
+    'for scheme in schemes:',
+    '    try:',
+    '        candidates.append(os.path.join(sysconfig.get_path("scripts", scheme=scheme) or "", name))',
+    '    except Exception:',
+    '        pass',
+    'try:',
+    '    candidates.append(os.path.join(site.getuserbase(), "Scripts" if os.name == "nt" else "bin", name))',
+    'except Exception:',
+    '    pass',
+    'for candidate in candidates:',
+    '    if candidate and os.path.exists(candidate):',
+    '        print(os.path.abspath(candidate))',
+    '        break',
+  ].join('\n');
+  try {
+    const output = await runProcess(python.command, [...python.args, '-c', code], 10_000);
+    const candidate = output.stdout.trim().split(/\r?\n/).pop() || '';
+    if (!candidate) {
+      return '';
+    }
+    await fs.access(candidate);
+    return candidate;
+  } catch {
+    return '';
+  }
 }
 
 function parseCheckOutput(output: string): Map<string, { ok: boolean; error?: string }> {
@@ -874,8 +1036,8 @@ function formatBackendUnavailable(command: string, error: unknown): string {
   if (isMissingCommandError(command, error)) {
     return [
       `taproot-mcp 不可用: 找不到命令 "${command}"。`,
-      '请在扩展运行的同一环境安装 taproot-mcp，',
-      '或把 taproot.taprootMcpCommand 设置为可执行文件的绝对路径。',
+      '请点击 Install/Update Backend 安装后端，',
+      '或在扩展运行的同一环境安装 taproot-mcp。',
       'Remote-SSH 场景下应安装在 SSH 远端。',
     ].join('');
   }

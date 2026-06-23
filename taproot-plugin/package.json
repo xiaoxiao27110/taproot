@@ -2,7 +2,7 @@
   "name": "taproot-mcp",
   "displayName": "taproot-mcp",
   "description": "Fleet-level MCP dashboard for SSH clusters: edit nodes.yaml and check taproot-mcp connectivity.",
-  "version": "0.1.45",
+  "version": "0.1.46",
   "publisher": "xiaoxiao27110",
   "license": "SEE LICENSE IN LICENSE",
   "preview": true,
@@ -55,6 +55,7 @@
     "onCommand:taproot.openConfig",
     "onCommand:taproot.testConnections",
     "onCommand:taproot.refreshNodes",
+    "onCommand:taproot.installBackend",
     "onCommand:taproot.startServer",
     "onCommand:taproot.stopServer",
     "onCommand:taproot.openNodeTerminal",
@@ -84,6 +85,12 @@
         "title": "Refresh Nodes",
         "category": "taproot-mcp",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "taproot.installBackend",
+        "title": "Install/Update Backend",
+        "category": "taproot-mcp",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "taproot.startServer",
@@ -149,6 +156,11 @@
           "default": "taproot-mcp",
           "description": "Command used to run taproot-mcp for connection checks."
         },
+        "taproot.pythonCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Python command used when installing or updating the taproot-mcp backend. Empty auto-detects python3/python."
+        },
         "taproot.statusPollIntervalSeconds": {
           "type": "number",
           "default": 60,
@@ -184,6 +196,9 @@
           "command": "taproot.refreshNodes"
         },
         {
+          "command": "taproot.installBackend"
+        },
+        {
           "command": "taproot.startServer"
         },
         {
@@ -191,6 +206,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "taproot.installBackend",
+          "when": "view == taproot.nodes",
+          "group": "navigation@0"
+        },
         {
           "command": "taproot.startServer",
           "when": "view == taproot.nodes && !taproot.serverRunning",

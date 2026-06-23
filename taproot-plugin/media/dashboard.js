@@ -206,6 +206,18 @@
       showToast(message.message || '已保存 nodes.yaml');
       return;
     }
+    if (message.type === 'backendInstalled') {
+      if (state) {
+        state.installingBackend = false;
+      }
+      applyBackendState(message.state, true, { preserveScroll: true });
+      if (state) {
+        state.installingBackend = false;
+        persist();
+      }
+      showToast(message.message || '后端已安装/更新');
+      return;
+    }
     if (message.type === 'testResults') {
       mergeTestResults(message.state);
       showToast(message.message || '连接测试完成');
@@ -220,6 +232,10 @@
       return;
     }
     if (message.type === 'error') {
+      if (state) {
+        state.installingBackend = false;
+        persist();
+      }
       showToast(message.message || '操作失败', 'error');
       return;
     }
@@ -291,6 +307,7 @@
       configOpen: current.configOpen,
       pendingNewNodeId: current.pendingNewNodeId,
       dirty: current.dirty,
+      installingBackend: current.installingBackend,
     };
   }
 
@@ -372,6 +389,7 @@
       toast: null,
       toastTone: 'success',
       dirty: !!ui.dirty,
+      installingBackend: !!ui.installingBackend,
     };
   }
 
@@ -411,6 +429,12 @@
       case 'refreshAll':
       case 'testAll':
         testConnections();
+        break;
+      case 'installBackend':
+        state.installingBackend = true;
+        persist();
+        render({ preserveScroll: true });
+        vscode.postMessage({ type: 'installBackend' });
         break;
       case 'openConfig':
       case 'showConfig':
@@ -801,6 +825,9 @@
             <div class="product-kicker">${taprootMark()}<span>taproot-mcp</span></div>
           </div>
           <div class="header-actions">
+            <button class="button secondary compact" data-action="installBackend" title="安装或更新 taproot-mcp 后端" ${state.installingBackend ? 'disabled' : ''}>
+              <span class="codicon codicon-cloud-download"></span><span>${state.installingBackend ? '安装中…' : '安装/更新后端'}</span>
+            </button>
             <div class="backend-state ${state.backend.connected ? '' : 'error'}">
               <span class="codicon ${state.backend.connected ? 'codicon-plug' : 'codicon-warning'}"></span>${esc(state.backend.message)}
             </div>
@@ -1475,6 +1502,12 @@
     }
     if (message.type === 'copySsh' || message.type === 'openTerminal') {
       setTimeout(() => receive({ type: 'toast', message: message.type === 'copySsh' ? '已复制 SSH 命令' : '终端执行 SSH 命令' }), 40);
+      return;
+    }
+    if (message.type === 'installBackend') {
+      const next = mockState();
+      next.backend = { connected: true, message: 'taproot-mcp 已连接' };
+      setTimeout(() => receive({ type: 'backendInstalled', state: next, message: '后端已安装/更新' }), 240);
     }
   }
 

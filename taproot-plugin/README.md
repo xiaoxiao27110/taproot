@@ -4,48 +4,37 @@ VS Code control panel for Taproot: configure SSH nodes, check status, and use th
 
 ## Quick Start
 
-### 1. Install `taproot-mcp`
-
-Install the Python package in the same environment where this extension runs. For Remote-SSH, install it on the SSH remote host.
-
-```bash
-python -m pip install taproot-mcp
-taproot-mcp --help
-```
-
-### 2. Install this extension
+### 1. Install this extension
 
 Install `taproot-mcp` from the VS Code Marketplace.
 
-For Remote-SSH, make sure it is installed under `SSH: <host>`, not `Local`.
+For Remote-SSH, install it under `SSH: <host>`, not `Local`.
 
-Usually no extension setting is needed after `python -m pip install taproot-mcp`.
+Open the Taproot panel and click **Install/Update Backend**.
 
-If the Taproot panel says `taproot-mcp` is unavailable, set `taproot.taprootMcpCommand` to the full path of the installed command. This is only needed when VS Code cannot see the same `PATH` as your terminal.
+Taproot runs on the same machine as the agent that connects to it. In a Remote-SSH VS Code window, extension commands run on the SSH host.
 
-### 3. Add nodes
+### 2. Add nodes
 
 Open the Taproot panel, add your SSH nodes, then run the connection check from the panel.
 
-### 4. Start the local MCP server
+### 3. Start the local MCP server
 
-In the Taproot panel, click **Start Local MCP Server**.
+In the Taproot side bar or Command Palette, click **Start Local MCP Server**.
 
-In your agent's MCP settings, use this server URL:
+### 4. Connect your agent
 
 ```text
 http://localhost:8765/mcp
 ```
 
-The server runs on the same local machine as your agent and manages remote nodes through SSH.
-
-## Agent Examples
-
-Claude Code HTTP:
+Claude Code:
 
 ```bash
 claude mcp add --transport http taproot http://localhost:8765/mcp
 ```
+
+## Agent Examples
 
 Manual server start, without the VS Code button:
 
@@ -76,6 +65,7 @@ claude mcp add taproot -- taproot-mcp serve --config /absolute/path/to/nodes.yam
 
 - `taproot.configPath`: Path to `nodes.yaml`. Empty uses workspace `nodes.yaml`, then `~/.config/taproot/nodes.yaml`.
 - `taproot.taprootMcpCommand`: Command used for `taproot-mcp check`.
+- `taproot.pythonCommand`: Python command used by **Install/Update Backend**. Empty auto-detects Python.
 
 ## Security
 

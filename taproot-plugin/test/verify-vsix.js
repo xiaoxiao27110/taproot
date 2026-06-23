@@ -65,13 +65,17 @@ assert.equal(packagedManifest.license, 'SEE LICENSE IN LICENSE');
 assert.equal(packagedManifest.publisher, 'xiaoxiao27110');
 assert(packagedManifest.activationEvents.includes('onView:taproot.nodes'));
 assert(packagedManifest.activationEvents.includes('onCommand:taproot.refreshNodes'));
+assert(packagedManifest.activationEvents.includes('onCommand:taproot.installBackend'));
 assert.equal(packagedManifest.contributes?.icons?.['taproot-root']?.default?.fontPath, './media/taproot-icons.woff');
 assert(commands.includes('taproot.refreshNodes'));
+assert(commands.includes('taproot.installBackend'));
 assert(commands.includes('taproot.startServer'));
 assert(commands.includes('taproot.stopServer'));
 
 const extensionSource = unzip(['-p', vsixPath, 'extension/out/src/extension.js']);
 assert(extensionSource.includes("registerCommand('taproot.refreshNodes'"));
+assert(extensionSource.includes("registerCommand('taproot.installBackend'"));
+assert(extensionSource.includes("case 'installBackend'"));
 assert(extensionSource.includes("registerCommand('taproot.startServer'"));
 assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
 assert.equal(packagedManifest.name, 'taproot-mcp');

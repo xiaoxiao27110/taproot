@@ -8,26 +8,23 @@ Remote nodes only need SSH access. They do not need Taproot installed.
 
 ## Quick Start
 
-### 1. Install `taproot-mcp`
-
-Install it on the same machine where the MCP server will run. For VS Code Remote-SSH, install it on the SSH remote host.
-
-```bash
-python -m pip install taproot-mcp
-taproot-mcp --help
-```
-
-### 2. Install the VS Code extension
+### 1. Install the VS Code extension
 
 Install `taproot-mcp` from the VS Code Marketplace.
 
-For Remote-SSH, make sure the extension is installed under `SSH: <host>`, not `Local`.
+For Remote-SSH, install it under `SSH: <host>`, not `Local`.
 
-Usually no extension setting is needed after `python -m pip install taproot-mcp`.
+Open the Taproot panel and click **Install/Update Backend**.
 
-If the Taproot panel says `taproot-mcp` is unavailable, set `taproot.taprootMcpCommand` to the full path of the installed command. This is only needed when VS Code cannot see the same `PATH` as your terminal.
+Taproot runs on the same machine as the agent that connects to it. In a Remote-SSH VS Code window, extension commands run on the SSH host.
 
-### 3. Add nodes
+CLI-only install, without VS Code:
+
+```bash
+python -m pip install taproot-mcp
+```
+
+### 2. Add nodes
 
 Open the Taproot panel in VS Code, add your SSH nodes, then run the connection check from the panel.
 
@@ -37,17 +34,21 @@ You can also check from a terminal:
 taproot-mcp check --config /absolute/path/to/nodes.yaml
 ```
 
-### 4. Start the local MCP server
+### 3. Start the local MCP server
 
-In VS Code, press `Ctrl+Shift+P` (`Command+Shift+P` on macOS), type `taproot`, and click **Start Local MCP Server**.
+In the Taproot panel or Command Palette, click **Start Local MCP Server**.
 
-In your agent's MCP settings, use this server URL:
+### 4. Connect your agent
 
 ```text
 http://localhost:8765/mcp
 ```
 
-The server runs on the same local machine as your agent and manages remote nodes through SSH.
+Claude Code:
+
+```bash
+claude mcp add --transport http taproot http://localhost:8765/mcp
+```
 
 ## Agent Examples
 
@@ -55,12 +56,6 @@ Manual server start, without the VS Code button:
 
 ```bash
 taproot-mcp serve --config /absolute/path/to/nodes.yaml --transport http --host 127.0.0.1 --port 8765
-```
-
-Claude Code HTTP:
-
-```bash
-claude mcp add --transport http taproot http://localhost:8765/mcp
 ```
 
 ### Stdio Alternative
