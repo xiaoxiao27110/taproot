@@ -1,5 +1,7 @@
 # Taproot
 
+[简体中文](README.zh-CN.md)
+
 Taproot is a local fleet-level MCP server for SSH-managed clusters, with an optional VS Code dashboard for editing `nodes.yaml` and checking node connectivity.
 
 The GitHub project is `taproot`, the Python package is `taproot-mcp`, and the VS Code extension is `Taproot` / `taproot-vscode`.
