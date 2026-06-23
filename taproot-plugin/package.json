@@ -4,7 +4,31 @@
   "description": "Visual nodes.yaml editor and connection dashboard for taproot-mcp.",
   "version": "0.1.42",
   "publisher": "taproot",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
+  "preview": true,
+  "pricing": "Free",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#111827",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiaoxiao27110/taproot.git",
+    "directory": "taproot-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/xiaoxiao27110/taproot/issues"
+  },
+  "homepage": "https://github.com/xiaoxiao27110/taproot#readme",
+  "keywords": [
+    "mcp",
+    "ssh",
+    "cluster",
+    "fleet",
+    "nodes.yaml",
+    "taproot"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -12,6 +36,19 @@
     "Other"
   ],
   "main": "./out/src/extension.js",
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Taproot reads and writes local nodes.yaml files and runs the local taproot-mcp command."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Taproot requires local filesystem and process access for nodes.yaml and taproot-mcp."
+    }
+  },
   "activationEvents": [
     "onView:taproot.nodes",
     "onCommand:taproot.openDashboard",
@@ -166,6 +203,7 @@
     "@types/node": "^20.14.8",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "3.9.2",
     "jsdom": "^29.1.1",
     "typescript": "^5.5.4"
   }

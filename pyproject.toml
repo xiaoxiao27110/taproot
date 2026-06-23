@@ -8,11 +8,42 @@ version = "0.2.0"
 description = "Fleet-level MCP server for SSH-managed clusters"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "xiaoxiao" },
+]
+keywords = [
+  "mcp",
+  "ssh",
+  "cluster",
+  "fleet",
+  "automation",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development",
+  "Topic :: System :: Clustering",
+  "Topic :: System :: Systems Administration",
+]
 dependencies = [
   "asyncssh>=2.14",
   "mcp[cli]>=1.27,<2",
   "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/xiaoxiao27110/taproot"
+Repository = "https://github.com/xiaoxiao27110/taproot"
+Issues = "https://github.com/xiaoxiao27110/taproot/issues"
+Changelog = "https://github.com/xiaoxiao27110/taproot/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = [

@@ -1,10 +1,22 @@
-# taproot-mcp
+# Taproot
 
-`taproot-mcp` is a local fleet-level MCP server. It runs on the same machine as Codex or Claude Code, exposes a fixed set of cluster tools over MCP, and reaches each configured node through SSH.
+Taproot is a local fleet-level MCP server for SSH-managed clusters, with an optional VS Code dashboard for editing `nodes.yaml` and checking node connectivity.
+
+The GitHub project is `taproot`, the Python package is `taproot-mcp`, and the VS Code extension is `Taproot` / `taproot-vscode`.
+
+`taproot-mcp` runs on the same machine as Codex or Claude Code, exposes a fixed set of cluster tools over MCP, and reaches each configured node through SSH.
 
 Remote nodes do not need taproot installed. They only need SSH access.
 
 ## Install
+
+From PyPI:
+
+```bash
+python -m pip install taproot-mcp
+```
+
+For local development:
 
 ```bash
 python3 -m venv .venv
@@ -45,6 +57,20 @@ nodes:
 ```
 
 `password` and `sudo_password` are supported for convenience, but they are stored in plaintext. Treat them with the same care as any other secret file.
+
+Taproot does not collect telemetry. Keep `nodes.yaml`, `.taproot/`, history files, approval files, SSH keys, and VSIX build outputs out of source control.
+
+## VS Code Extension
+
+The VS Code extension is a client UI for this package. It does not bundle the Python MCP server.
+
+Install `taproot-mcp` first so the `taproot-mcp` command is available on `PATH`:
+
+```bash
+python -m pip install taproot-mcp
+```
+
+Then install the `Taproot` extension from VS Code Marketplace. If the command is installed in a non-standard location, set the extension setting `taproot.taprootMcpCommand`.
 
 ## Check Nodes
 
