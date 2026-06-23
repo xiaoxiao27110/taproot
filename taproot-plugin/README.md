@@ -1,8 +1,8 @@
-# Taproot MCP VS Code Extension
+# taproot-mcp Extension
 
-Fleet-level MCP dashboard for SSH clusters: edit `nodes.yaml` and check `taproot-mcp` connectivity.
+Fleet-level VS Code dashboard for SSH clusters: edit `nodes.yaml` and check `taproot-mcp` connectivity.
 
-This extension is the VS Code client for the Taproot MCP project:
+This extension is the VS Code client for the Taproot project:
 
 https://github.com/xiaoxiao27110/taproot
 

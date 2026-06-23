@@ -6,7 +6,7 @@ All notable changes to Taproot are documented here.
 
 - Added tmux-backed single-node session tools for persistent shell workflows.
 - Added remote safety approvals, protected path handling, backups, and operation history.
-- Added the Taproot MCP VS Code extension for editing `nodes.yaml`, checking connections, and opening SSH terminals.
+- Added the taproot-mcp extension for editing `nodes.yaml`, checking connections, and opening SSH terminals.
 - Added package metadata and CI/release scaffolding for open source and Marketplace publishing.
 
 ## 0.1.0

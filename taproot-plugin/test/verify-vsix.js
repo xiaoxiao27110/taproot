@@ -71,7 +71,7 @@ assert(commands.includes('taproot.refreshNodes'));
 const extensionSource = unzip(['-p', vsixPath, 'extension/out/src/extension.js']);
 assert(extensionSource.includes("registerCommand('taproot.refreshNodes'"));
 assert.equal(packagedManifest.name, 'taproot-mcp');
-assert.equal(packagedManifest.displayName, 'Taproot MCP');
-assert(extensionSource.includes("status.text = '$(taproot-root) Taproot MCP';"));
+assert.equal(packagedManifest.displayName, 'taproot-mcp');
+assert(extensionSource.includes("status.text = '$(taproot-root) taproot-mcp';"));
 
-console.log(`Verified ${path.basename(vsixPath)} contains runtime dependencies and Taproot MCP commands.`);
+console.log(`Verified ${path.basename(vsixPath)} contains runtime dependencies and taproot-mcp commands.`);

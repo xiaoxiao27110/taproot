@@ -798,7 +798,7 @@
       <main class="editor editor-standalone">
         <div class="product-header">
           <div>
-            <div class="product-kicker">${taprootMark()}<span>Taproot MCP</span></div>
+            <div class="product-kicker">${taprootMark()}<span>taproot-mcp</span></div>
           </div>
           <div class="header-actions">
             <div class="backend-state ${state.backend.connected ? '' : 'error'}">

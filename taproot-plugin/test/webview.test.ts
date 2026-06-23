@@ -57,7 +57,7 @@ test('dashboard webview renders as a real extension surface and supports core in
     }
     originalLog(...args);
   };
-  await waitFor(() => dom.window.document.body.textContent?.includes('Taproot MCP'));
+  await waitFor(() => dom.window.document.body.textContent?.includes('taproot-mcp'));
 
   assert.match(dom.window.document.body.textContent || '', /gpu-node-1/);
   assert.match(dom.window.document.body.textContent || '', /节点详情/);

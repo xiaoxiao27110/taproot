@@ -1,6 +1,6 @@
 {
   "name": "taproot-mcp",
-  "displayName": "Taproot MCP",
+  "displayName": "taproot-mcp",
   "description": "Fleet-level MCP dashboard for SSH clusters: edit nodes.yaml and check taproot-mcp connectivity.",
   "version": "0.1.42",
   "publisher": "xiaoxiao27110",
@@ -63,36 +63,36 @@
       {
         "command": "taproot.openDashboard",
         "title": "Open Dashboard",
-        "category": "Taproot MCP"
+        "category": "taproot-mcp"
       },
       {
         "command": "taproot.openConfig",
         "title": "Edit Config",
-        "category": "Taproot MCP",
+        "category": "taproot-mcp",
         "icon": "$(settings)"
       },
       {
         "command": "taproot.testConnections",
         "title": "Test Connections",
-        "category": "Taproot MCP",
+        "category": "taproot-mcp",
         "icon": "$(plug)"
       },
       {
         "command": "taproot.refreshNodes",
         "title": "Refresh Nodes",
-        "category": "Taproot MCP",
+        "category": "taproot-mcp",
         "icon": "$(refresh)"
       },
       {
         "command": "taproot.openNodeTerminal",
         "title": "Open SSH Terminal",
-        "category": "Taproot MCP",
+        "category": "taproot-mcp",
         "icon": "$(terminal)"
       },
       {
         "command": "taproot.copyNodeSsh",
         "title": "Copy SSH Command",
-        "category": "Taproot MCP",
+        "category": "taproot-mcp",
         "icon": "$(copy)"
       }
     ],
@@ -109,7 +109,7 @@
       "activitybar": [
         {
           "id": "taproot",
-          "title": "Taproot MCP",
+          "title": "taproot-mcp",
           "icon": "media/taproot.svg"
         }
       ]
@@ -123,7 +123,7 @@
       ]
     },
     "configuration": {
-      "title": "Taproot MCP",
+      "title": "taproot-mcp",
       "properties": {
         "taproot.configPath": {
           "type": "string",

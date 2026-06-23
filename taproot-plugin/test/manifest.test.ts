@@ -5,7 +5,7 @@ import test from 'node:test';
 
 const root = path.resolve(__dirname, '..', '..');
 
-test('extension manifest contributes a Taproot MCP activity bar view', async () => {
+test('extension manifest contributes a taproot-mcp activity bar view', async () => {
   const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   const extensionSource = await readFile(path.join(root, 'src', 'extension.ts'), 'utf8');
   const contributes = manifest.contributes;
@@ -22,10 +22,10 @@ test('extension manifest contributes a Taproot MCP activity bar view', async () 
   assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.openConfig'));
   assert(contributes.menus['view/item/context'].some((item: { command: string }) => item.command === 'taproot.openNodeTerminal'));
   assert.equal(manifest.name, 'taproot-mcp');
-  assert.equal(manifest.displayName, 'Taproot MCP');
-  assert(extensionSource.includes("status.text = '$(taproot-root) Taproot MCP';"));
-  assert(!extensionSource.includes("status.text = '$(person) Taproot MCP';"));
-  assert(!extensionSource.includes("status.text = '$(remote) Taproot MCP';"));
+  assert.equal(manifest.displayName, 'taproot-mcp');
+  assert(extensionSource.includes("status.text = '$(taproot-root) taproot-mcp';"));
+  assert(!extensionSource.includes("status.text = '$(person) taproot-mcp';"));
+  assert(!extensionSource.includes("status.text = '$(remote) taproot-mcp';"));
   const existingPanelBlock = extensionSource.match(/if \(this\.panel\) \{([\s\S]*?)return;\n    \}/)?.[1] || '';
   assert(existingPanelBlock.includes('this.panel.reveal(vscode.ViewColumn.One);'));
   assert(existingPanelBlock.includes('this.flushPendingSelection();'));
