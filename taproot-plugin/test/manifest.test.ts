@@ -46,7 +46,8 @@ test('extension manifest contributes a taproot-mcp activity bar view', async () 
   assert(extensionSource.includes("registerCommand('taproot.installBackend'"));
   assert(extensionSource.includes("case 'installBackend'"));
   assert(extensionSource.includes("'pip'"));
-  assert(extensionSource.includes("'taproot-mcp'"));
+  assert(extensionSource.includes('BUNDLED_BACKEND_WHEEL'));
+  assert(extensionSource.includes('taproot_mcp-0.2.1-py3-none-any.whl'));
   assert(extensionSource.includes("registerCommand('taproot.startServer'"));
   assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
   assert(extensionSource.includes("'--transport'"));

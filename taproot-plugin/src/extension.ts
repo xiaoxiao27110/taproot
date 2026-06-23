@@ -30,6 +30,8 @@ interface TaprootTreeNode {
   nodeName?: string;
 }
 
+const BUNDLED_BACKEND_WHEEL = 'taproot_mcp-0.2.1-py3-none-any.whl';
+
 export function activate(context: vscode.ExtensionContext): void {
   const dashboard = new TaprootDashboard(context);
   void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
@@ -192,6 +194,7 @@ class TaprootDashboard {
   async installBackend(): Promise<void> {
     try {
       const python = await resolvePythonCommand(this.pythonCommand());
+      const installSource = await this.backendInstallSource();
       let installedCommand = '';
       await vscode.window.withProgress(
         {
@@ -202,7 +205,7 @@ class TaprootDashboard {
         async () => {
           await runProcess(
             python.command,
-            [...python.args, ...(await taprootInstallArgs(python))],
+            [...python.args, ...(await taprootInstallArgs(python, installSource))],
             180_000,
           );
           installedCommand = await resolveInstalledTaprootCommand(python);
@@ -634,6 +637,16 @@ class TaprootDashboard {
     return vscode.workspace.getConfiguration('taproot').get<string>('pythonCommand')?.trim() || '';
   }
 
+  private async backendInstallSource(): Promise<string> {
+    const wheelPath = vscode.Uri.joinPath(this.context.extensionUri, 'backend', BUNDLED_BACKEND_WHEEL).fsPath;
+    try {
+      await fs.access(wheelPath);
+      return wheelPath;
+    } catch {
+      return 'taproot-mcp';
+    }
+  }
+
   private async configureTaprootCommand(commandPath: string): Promise<void> {
     try {
       await fs.access(commandPath);
@@ -851,12 +864,12 @@ async function resolvePythonCommand(configuredCommand: string): Promise<CommandS
   throw new Error('No Python command found. Install Python or set taproot.pythonCommand.');
 }
 
-async function taprootInstallArgs(python: CommandSpec): Promise<string[]> {
+async function taprootInstallArgs(python: CommandSpec, installSource: string): Promise<string[]> {
   const args = ['-m', 'pip', 'install', '--upgrade'];
   if (!(await pythonUsesVirtualEnv(python))) {
     args.push('--user');
   }
-  args.push('taproot-mcp');
+  args.push(installSource);
   return args;
 }
 

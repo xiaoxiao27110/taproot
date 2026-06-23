@@ -25,6 +25,7 @@ const requiredEntries = [
   'extension/media/icon.png',
   'extension/media/taproot-icons.woff',
   'extension/media/taproot-status.svg',
+  'extension/backend/taproot_mcp-0.2.1-py3-none-any.whl',
   'extension/node_modules/js-yaml/package.json',
   'extension/node_modules/argparse/package.json',
   'extension/node_modules/@vscode/codicons/dist/codicon.css',
@@ -76,6 +77,7 @@ const extensionSource = unzip(['-p', vsixPath, 'extension/out/src/extension.js']
 assert(extensionSource.includes("registerCommand('taproot.refreshNodes'"));
 assert(extensionSource.includes("registerCommand('taproot.installBackend'"));
 assert(extensionSource.includes("case 'installBackend'"));
+assert(extensionSource.includes('taproot_mcp-0.2.1-py3-none-any.whl'));
 assert(extensionSource.includes("registerCommand('taproot.startServer'"));
 assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
 assert.equal(packagedManifest.name, 'taproot-mcp');
