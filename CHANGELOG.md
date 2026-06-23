@@ -2,6 +2,13 @@
 
 All notable changes to Taproot are documented here.
 
+## 0.2.1 - 2026-06-23
+
+- Added VS Code extension commands to start and stop the local HTTP MCP server.
+- Fixed Remote-SSH extension placement by running the extension on the workspace side.
+- Simplified README and Marketplace quick start instructions.
+- Added first-use `nodes.yaml` initialization in the VS Code extension.
+
 ## 0.2.0 - 2026-06-23
 
 - Added tmux-backed single-node session tools for persistent shell workflows.
