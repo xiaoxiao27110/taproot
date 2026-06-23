@@ -2,7 +2,7 @@
   "name": "taproot-mcp",
   "displayName": "taproot-mcp",
   "description": "Fleet-level MCP dashboard for SSH clusters: edit nodes.yaml and check taproot-mcp connectivity.",
-  "version": "0.1.42",
+  "version": "0.1.45",
   "publisher": "xiaoxiao27110",
   "license": "SEE LICENSE IN LICENSE",
   "preview": true,
@@ -37,16 +37,16 @@
   ],
   "main": "./out/src/extension.js",
   "extensionKind": [
-    "ui"
+    "workspace"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Taproot reads and writes local nodes.yaml files and runs the local taproot-mcp command."
+      "description": "Taproot reads and writes workspace nodes.yaml files and runs the workspace taproot-mcp command."
     },
     "virtualWorkspaces": {
       "supported": false,
-      "description": "Taproot requires local filesystem and process access for nodes.yaml and taproot-mcp."
+      "description": "Taproot requires workspace filesystem and process access for nodes.yaml and taproot-mcp."
     }
   },
   "activationEvents": [
@@ -55,6 +55,8 @@
     "onCommand:taproot.openConfig",
     "onCommand:taproot.testConnections",
     "onCommand:taproot.refreshNodes",
+    "onCommand:taproot.startServer",
+    "onCommand:taproot.stopServer",
     "onCommand:taproot.openNodeTerminal",
     "onCommand:taproot.copyNodeSsh"
   ],
@@ -82,6 +84,18 @@
         "title": "Refresh Nodes",
         "category": "taproot-mcp",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "taproot.startServer",
+        "title": "Start Local MCP Server",
+        "category": "taproot-mcp",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "taproot.stopServer",
+        "title": "Stop Local MCP Server",
+        "category": "taproot-mcp",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "taproot.openNodeTerminal",
@@ -140,6 +154,18 @@
           "default": 60,
           "minimum": 0,
           "description": "Interval for background node status polling in seconds. Set to 0 to disable polling."
+        },
+        "taproot.httpHost": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host used when the extension starts the local Taproot HTTP MCP server."
+        },
+        "taproot.httpPort": {
+          "type": "number",
+          "default": 8765,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port used when the extension starts the local Taproot HTTP MCP server."
         }
       }
     },
@@ -156,9 +182,25 @@
         },
         {
           "command": "taproot.refreshNodes"
+        },
+        {
+          "command": "taproot.startServer"
+        },
+        {
+          "command": "taproot.stopServer"
         }
       ],
       "view/title": [
+        {
+          "command": "taproot.startServer",
+          "when": "view == taproot.nodes && !taproot.serverRunning",
+          "group": "navigation@1"
+        },
+        {
+          "command": "taproot.stopServer",
+          "when": "view == taproot.nodes && taproot.serverRunning",
+          "group": "navigation@1"
+        },
         {
           "command": "taproot.openConfig",
           "when": "view == taproot.nodes",

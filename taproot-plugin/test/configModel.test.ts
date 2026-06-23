@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   DashboardState,
+  emptyState,
   makeSshCommand,
   makeSshpassCommand,
   parseNodesYaml,
@@ -97,6 +98,15 @@ nodes:
   const yaml = serializeNodesYaml(state);
   assert.match(yaml, /docker-node-01:/);
   assert.match(yaml, /host: 192\.168\.31\.51/);
+});
+
+test('emptyState serializes to an initial editable nodes.yaml skeleton', () => {
+  const yaml = serializeNodesYaml(emptyState('/tmp/nodes.yaml', backend));
+
+  assert.match(yaml, /defaults:/);
+  assert.match(yaml, /user: admin/);
+  assert.match(yaml, /port: 22/);
+  assert.match(yaml, /nodes: \{\}/);
 });
 
 test('validateState catches duplicate names and missing host', () => {

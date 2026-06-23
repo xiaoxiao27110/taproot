@@ -2,43 +2,87 @@
 
 [简体中文](README.zh-CN.md)
 
-Taproot is a local fleet-level MCP server for SSH-managed clusters, with an optional VS Code dashboard for editing `nodes.yaml` and checking node connectivity.
+Taproot is a local MCP server for SSH-managed nodes. Agents use `taproot-mcp serve`; the VS Code extension is the control panel for editing node config and checking status.
 
-The GitHub project is `taproot`, the Python package is `taproot-mcp`, and the VS Code extension is `taproot-mcp` / `taproot-mcp`.
+Remote nodes only need SSH access. They do not need Taproot installed.
 
-`taproot-mcp` runs on the same machine as Codex or Claude Code, exposes a fixed set of cluster tools over MCP, and reaches each configured node through SSH.
+## Quick Start
 
-Remote nodes do not need taproot installed. They only need SSH access.
+### 1. Install `taproot-mcp`
 
-## Install
-
-From PyPI:
+Install it on the same machine where the MCP server will run. For VS Code Remote-SSH, install it on the SSH remote host.
 
 ```bash
 python -m pip install taproot-mcp
-```
-
-For local development:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-```
-
-After installation, the command entrypoint is available:
-
-```bash
 taproot-mcp --help
 ```
 
-## Configuration
+### 2. Install the VS Code extension
 
-Config lookup order:
+Install `taproot-mcp` from the VS Code Marketplace.
 
-1. `TAPROOT_CONFIG`
-2. `./nodes.yaml`
-3. `~/.config/taproot/nodes.yaml`
+For Remote-SSH, make sure the extension is installed under `SSH: <host>`, not `Local`.
+
+Usually no extension setting is needed after `python -m pip install taproot-mcp`.
+
+If the Taproot panel says `taproot-mcp` is unavailable, set `taproot.taprootMcpCommand` to the full path of the installed command. This is only needed when VS Code cannot see the same `PATH` as your terminal.
+
+### 3. Add nodes
+
+Open the Taproot panel in VS Code, add your SSH nodes, then run the connection check from the panel.
+
+You can also check from a terminal:
+
+```bash
+taproot-mcp check --config /absolute/path/to/nodes.yaml
+```
+
+### 4. Start the local MCP server
+
+In VS Code, press `Ctrl+Shift+P` (`Command+Shift+P` on macOS), type `taproot`, and click **Start Local MCP Server**.
+
+In your agent's MCP settings, use this server URL:
+
+```text
+http://localhost:8765/mcp
+```
+
+The server runs on the same local machine as your agent and manages remote nodes through SSH.
+
+## Agent Examples
+
+Manual server start, without the VS Code button:
+
+```bash
+taproot-mcp serve --config /absolute/path/to/nodes.yaml --transport http --host 127.0.0.1 --port 8765
+```
+
+Claude Code HTTP:
+
+```bash
+claude mcp add --transport http taproot http://localhost:8765/mcp
+```
+
+### Stdio Alternative
+
+For MCP clients that launch servers by command, use stdio instead of a long-running HTTP server.
+
+Codex `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.taproot]
+command = "taproot-mcp"
+args = ["serve", "--config", "/absolute/path/to/nodes.yaml"]
+env = {}
+```
+
+Claude Code stdio:
+
+```bash
+claude mcp add taproot -- taproot-mcp serve --config /absolute/path/to/nodes.yaml
+```
+
+## `nodes.yaml`
 
 Example:
 
@@ -51,82 +95,26 @@ defaults:
 nodes:
   gpu-node-1:
     host: 192.168.1.101
-    tags: [gpu, h200, vllm]
+    tags: [gpu, vllm]
   dev-vm:
     host: 192.168.1.200
     user: dev
     tags: [dev, build]
 ```
 
-`password` and `sudo_password` are supported for convenience, but they are stored in plaintext. Treat them with the same care as any other secret file.
+Config lookup order:
 
-Taproot does not collect telemetry. Keep `nodes.yaml`, `.taproot/`, history files, approval files, SSH keys, and VSIX build outputs out of source control.
-
-## VS Code Extension
-
-The VS Code extension is a client UI for this package. It does not bundle the Python MCP server.
-
-Install `taproot-mcp` first so the `taproot-mcp` command is available on `PATH`:
-
-```bash
-python -m pip install taproot-mcp
-```
-
-Then install the `taproot-mcp` extension from VS Code Marketplace. If the command is installed in a non-standard location, set the extension setting `taproot.taprootMcpCommand`.
-
-## Check Nodes
-
-Before registering the MCP server with an agent, validate config and SSH connectivity:
-
-```bash
-taproot-mcp check --config ./nodes.yaml
-```
-
-## Run Server
-
-Stdio is the default transport:
-
-```bash
-taproot-mcp serve --config ./nodes.yaml
-```
-
-Streamable HTTP is available for clients that need an HTTP endpoint:
-
-```bash
-taproot-mcp serve --config ./nodes.yaml --transport http --host 127.0.0.1 --port 8765
-```
-
-## Codex Registration
-
-Add this to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.taproot]
-command = "taproot-mcp"
-args = ["serve", "--config", "/absolute/path/to/nodes.yaml"]
-env = {}
-```
-
-## Claude Code Registration
-
-```bash
-claude mcp add taproot -- taproot-mcp serve --config /absolute/path/to/nodes.yaml
-```
-
-For HTTP transport:
-
-```bash
-taproot-mcp serve --config /absolute/path/to/nodes.yaml --transport http --port 8765
-claude mcp add --transport http taproot http://localhost:8765/mcp
-```
+1. `TAPROOT_CONFIG`
+2. `./nodes.yaml`
+3. `~/.config/taproot/nodes.yaml`
 
 ## Tools
 
 Discovery:
 
-- `cluster_nodes` returns the current node inventory from the running MCP server. MCP clients should use this instead of reading `nodes.yaml` directly.
+- `cluster_nodes`
 
-v0.1 stateless broadcast tools:
+Broadcast tools:
 
 - `cluster_exec`
 - `cluster_read_file`
@@ -139,7 +127,7 @@ v0.1 stateless broadcast tools:
 - `cluster_upload`
 - `cluster_download`
 
-v0.2 single-node tmux session tools:
+Single-node tmux session tools:
 
 - `cluster_session_open`
 - `cluster_session_exec`
@@ -148,72 +136,33 @@ v0.2 single-node tmux session tools:
 - `cluster_session_close`
 - `cluster_session_list`
 
-All node-targeted tools return the same envelope shape:
+## Safety
 
-```json
-{
-  "results": {
-    "gpu-node-1": {"ok": true},
-    "gpu-node-2": {"ok": false, "error": "connection refused"}
-  },
-  "summary": {"success": 1, "failed": 1, "total": 2}
-}
-```
+- `password` and `sudo_password` in `nodes.yaml` are plaintext. Prefer SSH keys.
+- Do not commit `nodes.yaml`, `.taproot/`, history files, approval files, SSH keys, or VSIX files.
+- Taproot enforces remote permissions on the MCP server side.
+- Home-internal file tools run without approval, except protected directories such as `~/.ssh`, `~/.aws`, `~/.kube`, and `~/.taproot`.
+- Paths outside home, `sudo=True`, command execution, service mutations, and tmux command execution require CLI approval.
 
-Single-node targets use the same envelope with one result entry.
-
-## Remote Safety Policy
-
-Taproot enforces remote permissions on the MCP server side. Local agent sandbox
-settings do not grant extra access on remote nodes.
-
-- Remote file paths are resolved against the SSH user's physical `$HOME`.
-  Relative paths and `~/...` stay inside that home directory by default.
-- Home-internal file tools run without approval, except protected directories
-  such as `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`, and
-  `~/.taproot`.
-- Paths outside home, `sudo=True`, `cluster_exec`, service mutations, and
-  `cluster_session_exec` require CLI approval before execution.
-- Pending approvals are stored beside the active config in `.taproot/approvals.json`.
-
-Approve or reject high-risk operations from a separate terminal:
+Approve or reject pending operations:
 
 ```bash
-taproot-mcp approvals list --config ./nodes.yaml --status pending
-taproot-mcp approvals approve <approval-id> --config ./nodes.yaml
-taproot-mcp approvals reject <approval-id> --config ./nodes.yaml
+taproot-mcp approvals list --config /absolute/path/to/nodes.yaml --status pending
+taproot-mcp approvals approve <approval-id> --config /absolute/path/to/nodes.yaml
+taproot-mcp approvals reject <approval-id> --config /absolute/path/to/nodes.yaml
 ```
 
-Backups for write/edit/upload operations are centralized on each remote node:
-
-```text
-~/.taproot/backups/<path_sha256>/<local-utc-timestamp>--<basename>
-```
-
-Taproot uses the MCP server's UTC clock for backup filenames and prunes backups
-per original path to the newest 300 entries and entries no older than 30 days.
-
-## Operation History
-
-Every node-targeted MCP tool call appends per-node JSONL events to:
-
-```text
-<nodes.yaml directory>/.taproot/history.jsonl
-```
-
-The history excludes password fields. `cluster_write_file` stores a bounded write-content preview for UI inspection. Inspect history with:
-
-```bash
-taproot-mcp history --config ./nodes.yaml --node gpu-node-1 --limit 50
-```
-
-## Tests
-
-The project test flow lives in `test-flow/`:
+## Development
 
 ```bash
 python -m pip install -e ".[test]"
 python -m pytest
 ```
 
-Local SSH/tmux integration tests are skipped unless `TAPROOT_TEST_CONFIG` is set. See `test-flow/README.md`.
+VS Code extension:
+
+```bash
+cd taproot-plugin
+npm install
+npm test
+```

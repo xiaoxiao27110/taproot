@@ -32,6 +32,7 @@ interface TaprootTreeNode {
 
 export function activate(context: vscode.ExtensionContext): void {
   const dashboard = new TaprootDashboard(context);
+  void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
   dashboard.startStatusPolling();
   const treeProvider = new TaprootNodesProvider(dashboard);
   const treeView = vscode.window.createTreeView('taproot.nodes', {
@@ -54,6 +55,8 @@ export function activate(context: vscode.ExtensionContext): void {
       treeProvider.refresh();
     }),
     vscode.commands.registerCommand('taproot.refreshNodes', () => dashboard.reloadState()),
+    vscode.commands.registerCommand('taproot.startServer', () => dashboard.startHttpServer()),
+    vscode.commands.registerCommand('taproot.stopServer', () => dashboard.stopHttpServer()),
     vscode.commands.registerCommand('taproot.openNodeTerminal', async (item?: TaprootTreeNode) => {
       await dashboard.openTerminalForNode(item?.nodeName);
     }),
@@ -83,11 +86,13 @@ class TaprootDashboard {
   private autoCheckPromise: Promise<DashboardState> | undefined;
   private suppressNextAutoCheck = false;
   private statusPollTimer: NodeJS.Timeout | undefined;
+  private serverProcess: cp.ChildProcess | undefined;
 
   readonly onDidChangeState = this.stateEmitter.event;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.context.subscriptions.push({ dispose: () => this.stopStatusPolling() });
+    this.context.subscriptions.push({ dispose: () => void this.stopHttpServer({ silent: true }) });
   }
 
   startStatusPolling(): void {
@@ -183,6 +188,86 @@ class TaprootDashboard {
     await this.copySsh(await this.loadState(), nodeName);
   }
 
+  async startHttpServer(): Promise<void> {
+    if (this.serverProcess) {
+      vscode.window.showInformationMessage(`Taproot MCP server is already running at ${this.serverUrl()}`);
+      return;
+    }
+
+    const configPath = this.resolveConfigPath();
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    try {
+      await fs.access(configPath);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === 'ENOENT') {
+        await this.createInitialConfig(emptyState(configPath, await this.checkBackend()));
+      } else {
+        throw error;
+      }
+    }
+
+    const command = this.taprootCommand();
+    const args = [
+      'serve',
+      '--config',
+      configPath,
+      '--transport',
+      'http',
+      '--host',
+      this.httpHost(),
+      '--port',
+      String(this.httpPort()),
+    ];
+    const child = cp.spawn(command, args, {
+      shell: process.platform === 'win32',
+      windowsHide: true,
+    });
+
+    let output = '';
+    child.stdout?.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+    child.on('error', (error) => {
+      this.serverProcess = undefined;
+      void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+      vscode.window.showErrorMessage(`Taproot MCP server failed to start: ${formatError(error)}`);
+    });
+    child.on('close', (code) => {
+      if (this.serverProcess === child) {
+        this.serverProcess = undefined;
+        void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+      }
+      if (code !== null && code !== 0) {
+        const detail = output.trim();
+        vscode.window.showErrorMessage(`Taproot MCP server exited (${code})${detail ? `: ${detail}` : ''}`);
+      }
+    });
+
+    this.serverProcess = child;
+    await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', true);
+    vscode.window.showInformationMessage(`Taproot MCP server started: ${this.serverUrl()}`);
+  }
+
+  async stopHttpServer(options: { silent?: boolean } = {}): Promise<void> {
+    const child = this.serverProcess;
+    if (!child) {
+      if (!options.silent) {
+        vscode.window.showInformationMessage('Taproot MCP server is not running.');
+      }
+      return;
+    }
+    this.serverProcess = undefined;
+    child.kill();
+    await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+    if (!options.silent) {
+      vscode.window.showInformationMessage('Taproot MCP server stopped.');
+    }
+  }
+
   private async handleMessage(message: WebviewMessage): Promise<void> {
     try {
       switch (message.type) {
@@ -236,12 +321,30 @@ class TaprootDashboard {
       return state;
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
-      if (err.code !== 'ENOENT') {
+      if (err.code === 'ENOENT') {
+        const state = emptyState(configPath, backend);
+        await this.createInitialConfig(state);
+        this.lastState = state;
+        return state;
+      } else {
         vscode.window.showWarningMessage(`Taproot config load failed: ${formatError(error)}`);
       }
       const state = emptyState(configPath, backend);
       this.lastState = state;
       return state;
+    }
+  }
+
+  private async createInitialConfig(state: DashboardState): Promise<void> {
+    try {
+      await fs.mkdir(path.dirname(state.configPath), { recursive: true });
+      await fs.writeFile(state.configPath, serializeNodesYaml(state), { encoding: 'utf8', flag: 'wx' });
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === 'EEXIST') {
+        return;
+      }
+      vscode.window.showWarningMessage(`Taproot config create failed: ${formatError(error)}`);
     }
   }
 
@@ -484,17 +587,31 @@ class TaprootDashboard {
     return vscode.workspace.getConfiguration('taproot').get<string>('taprootMcpCommand')?.trim() || 'taproot-mcp';
   }
 
+  private httpHost(): string {
+    return vscode.workspace.getConfiguration('taproot').get<string>('httpHost')?.trim() || '127.0.0.1';
+  }
+
+  private httpPort(): number {
+    const port = vscode.workspace.getConfiguration('taproot').get<number>('httpPort') ?? 8765;
+    return Number.isInteger(port) && port > 0 ? port : 8765;
+  }
+
+  private serverUrl(): string {
+    return `http://${this.httpHost()}:${this.httpPort()}/mcp`;
+  }
+
   private statusPollIntervalMs(): number {
     const seconds = vscode.workspace.getConfiguration('taproot').get<number>('statusPollIntervalSeconds') ?? 60;
     return Math.max(0, seconds) * 1_000;
   }
 
   private async checkBackend() {
+    const command = this.taprootCommand();
     try {
-      await runProcess(this.taprootCommand(), ['--help'], 10_000);
+      await runProcess(command, ['--help'], 10_000);
       return { connected: true, message: 'taproot-mcp 已连接' };
     } catch (error) {
-      return { connected: false, message: `taproot-mcp 不可用: ${formatError(error)}` };
+      return { connected: false, message: formatBackendUnavailable(command, error) };
     }
   }
 
@@ -751,6 +868,32 @@ function statusThemeIcon(status: DashboardState['nodes'][number]['status']): vsc
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatBackendUnavailable(command: string, error: unknown): string {
+  if (isMissingCommandError(command, error)) {
+    return [
+      `taproot-mcp 不可用: 找不到命令 "${command}"。`,
+      '请在扩展运行的同一环境安装 taproot-mcp，',
+      '或把 taproot.taprootMcpCommand 设置为可执行文件的绝对路径。',
+      'Remote-SSH 场景下应安装在 SSH 远端。',
+    ].join('');
+  }
+  return `taproot-mcp 不可用: ${formatError(error)}`;
+}
+
+function isMissingCommandError(command: string, error: unknown): boolean {
+  const errno = error as NodeJS.ErrnoException;
+  if (errno.code === 'ENOENT') {
+    return true;
+  }
+  const message = formatError(error).toLowerCase();
+  return (
+    message.includes(`${command.toLowerCase()}: command not found`) ||
+    message.includes(`${command.toLowerCase()}: not found`) ||
+    message.includes(`'${command.toLowerCase()}' is not recognized`) ||
+    message.startsWith(`'${command.toLowerCase()}' `)
+  );
 }
 
 function shellQuote(value: string): string {

@@ -67,11 +67,16 @@ assert(packagedManifest.activationEvents.includes('onView:taproot.nodes'));
 assert(packagedManifest.activationEvents.includes('onCommand:taproot.refreshNodes'));
 assert.equal(packagedManifest.contributes?.icons?.['taproot-root']?.default?.fontPath, './media/taproot-icons.woff');
 assert(commands.includes('taproot.refreshNodes'));
+assert(commands.includes('taproot.startServer'));
+assert(commands.includes('taproot.stopServer'));
 
 const extensionSource = unzip(['-p', vsixPath, 'extension/out/src/extension.js']);
 assert(extensionSource.includes("registerCommand('taproot.refreshNodes'"));
+assert(extensionSource.includes("registerCommand('taproot.startServer'"));
+assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
 assert.equal(packagedManifest.name, 'taproot-mcp');
 assert.equal(packagedManifest.displayName, 'taproot-mcp');
+assert.deepEqual(packagedManifest.extensionKind, ['workspace']);
 assert(extensionSource.includes("status.text = '$(taproot-root) taproot-mcp';"));
 
 console.log(`Verified ${path.basename(vsixPath)} contains runtime dependencies and taproot-mcp commands.`);
