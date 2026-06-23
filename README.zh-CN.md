@@ -4,7 +4,7 @@
 
 Taproot 是一个运行在本地的 fleet-level MCP server，用于通过 SSH 管理集群节点；同时提供可选的 VS Code dashboard，用来编辑 `nodes.yaml`、检查节点连接状态，并快速打开 SSH 终端。
 
-GitHub 项目名是 `taproot`，Python 包名是 `taproot-mcp`，VS Code 扩展名是 `Taproot` / `taproot-vscode`。
+GitHub 项目名是 `taproot`，Python 包名是 `taproot-mcp`，VS Code 扩展名是 `Taproot MCP` / `taproot-mcp`。
 
 `taproot-mcp` 运行在 Codex 或 Claude Code 所在的本地机器上，通过 MCP 暴露固定的一组集群工具，并通过 SSH 连接每个配置好的节点。
 
@@ -72,7 +72,7 @@ VS Code 扩展是这个包的客户端 UI，不内置 Python MCP server。
 python -m pip install taproot-mcp
 ```
 
-然后从 VS Code Marketplace 安装 `Taproot` 扩展。如果命令安装在非标准路径，可以设置扩展配置项 `taproot.taprootMcpCommand`。
+然后从 VS Code Marketplace 安装 `Taproot MCP` 扩展。如果命令安装在非标准路径，可以设置扩展配置项 `taproot.taprootMcpCommand`。
 
 ## 检查节点
 

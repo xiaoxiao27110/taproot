@@ -41,7 +41,6 @@ const forbiddenEntries = [
   'extension/out/test/manifest.test.js',
   'extension/nodes.yaml',
   'extension/.taproot/history.jsonl',
-  'extension/Taproot VS Code Extension_副本.html',
 ];
 
 for (const entry of forbiddenEntries) {
@@ -53,6 +52,7 @@ for (const entry of entries) {
   assert(!entry.startsWith('extension/src/'), `VSIX contains TypeScript sources: ${entry}`);
   assert(!entry.startsWith('extension/.taproot/'), `VSIX contains local Taproot state: ${entry}`);
   assert(!entry.endsWith('.vsix'), `VSIX contains a nested VSIX: ${entry}`);
+  assert(!entry.endsWith('Extension_副本.html'), `VSIX contains a copied extension HTML export: ${entry}`);
 }
 
 const packagedManifest = readArchiveJson('extension/package.json');
@@ -62,6 +62,7 @@ assert.equal(packagedManifest.repository?.url, 'https://github.com/xiaoxiao27110
 assert.equal(packagedManifest.preview, true);
 assert.equal(packagedManifest.icon, 'media/icon.png');
 assert.equal(packagedManifest.license, 'SEE LICENSE IN LICENSE');
+assert.equal(packagedManifest.publisher, 'xiaoxiao27110');
 assert(packagedManifest.activationEvents.includes('onView:taproot.nodes'));
 assert(packagedManifest.activationEvents.includes('onCommand:taproot.refreshNodes'));
 assert.equal(packagedManifest.contributes?.icons?.['taproot-root']?.default?.fontPath, './media/taproot-icons.woff');
@@ -69,6 +70,8 @@ assert(commands.includes('taproot.refreshNodes'));
 
 const extensionSource = unzip(['-p', vsixPath, 'extension/out/src/extension.js']);
 assert(extensionSource.includes("registerCommand('taproot.refreshNodes'"));
-assert(extensionSource.includes("status.text = '$(taproot-root) Taproot';"));
+assert.equal(packagedManifest.name, 'taproot-mcp');
+assert.equal(packagedManifest.displayName, 'Taproot MCP');
+assert(extensionSource.includes("status.text = '$(taproot-root) Taproot MCP';"));
 
-console.log(`Verified ${path.basename(vsixPath)} contains runtime dependencies and Taproot commands.`);
+console.log(`Verified ${path.basename(vsixPath)} contains runtime dependencies and Taproot MCP commands.`);

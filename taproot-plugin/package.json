@@ -1,9 +1,9 @@
 {
-  "name": "taproot-vscode",
-  "displayName": "Taproot",
-  "description": "Visual nodes.yaml editor and connection dashboard for taproot-mcp.",
+  "name": "taproot-mcp",
+  "displayName": "Taproot MCP",
+  "description": "Fleet-level MCP dashboard for SSH clusters: edit nodes.yaml and check taproot-mcp connectivity.",
   "version": "0.1.42",
-  "publisher": "taproot",
+  "publisher": "xiaoxiao27110",
   "license": "SEE LICENSE IN LICENSE",
   "preview": true,
   "pricing": "Free",
@@ -63,36 +63,36 @@
       {
         "command": "taproot.openDashboard",
         "title": "Open Dashboard",
-        "category": "Taproot"
+        "category": "Taproot MCP"
       },
       {
         "command": "taproot.openConfig",
         "title": "Edit Config",
-        "category": "Taproot",
+        "category": "Taproot MCP",
         "icon": "$(settings)"
       },
       {
         "command": "taproot.testConnections",
         "title": "Test Connections",
-        "category": "Taproot",
+        "category": "Taproot MCP",
         "icon": "$(plug)"
       },
       {
         "command": "taproot.refreshNodes",
         "title": "Refresh Nodes",
-        "category": "Taproot",
+        "category": "Taproot MCP",
         "icon": "$(refresh)"
       },
       {
         "command": "taproot.openNodeTerminal",
         "title": "Open SSH Terminal",
-        "category": "Taproot",
+        "category": "Taproot MCP",
         "icon": "$(terminal)"
       },
       {
         "command": "taproot.copyNodeSsh",
         "title": "Copy SSH Command",
-        "category": "Taproot",
+        "category": "Taproot MCP",
         "icon": "$(copy)"
       }
     ],
@@ -109,7 +109,7 @@
       "activitybar": [
         {
           "id": "taproot",
-          "title": "Taproot",
+          "title": "Taproot MCP",
           "icon": "media/taproot.svg"
         }
       ]
@@ -123,7 +123,7 @@
       ]
     },
     "configuration": {
-      "title": "Taproot",
+      "title": "Taproot MCP",
       "properties": {
         "taproot.configPath": {
           "type": "string",

@@ -2,8 +2,8 @@ const assert = require('node:assert/strict');
 const vscode = require('vscode');
 
 async function run() {
-  const extension = vscode.extensions.getExtension('taproot.taproot-vscode');
-  assert(extension, 'Taproot extension is not registered in the extension host');
+  const extension = vscode.extensions.getExtension('xiaoxiao27110.taproot-mcp');
+  assert(extension, 'Taproot MCP extension is not registered in the extension host');
 
   const configPath = process.env.TAPROOT_TEST_CONFIG;
   const config = vscode.workspace.getConfiguration('taproot');

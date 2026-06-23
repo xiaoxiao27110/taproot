@@ -64,8 +64,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
   status.command = 'taproot.openDashboard';
-  status.text = '$(taproot-root) Taproot';
-  status.tooltip = 'Open Taproot dashboard';
+  status.text = '$(taproot-root) Taproot MCP';
+  status.tooltip = 'Open Taproot MCP dashboard';
   status.show();
   context.subscriptions.push(status);
 }
@@ -131,7 +131,7 @@ class TaprootDashboard {
 
     this.panel = vscode.window.createWebviewPanel(
       'taprootDashboard',
-      'Taproot Nodes',
+      'Taproot MCP Nodes',
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -315,7 +315,7 @@ class TaprootDashboard {
       return state;
     }
 
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'taproot-vscode-'));
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'taproot-mcp-'));
     const tmpConfig = path.join(tmpDir, 'nodes.yaml');
     await fs.writeFile(tmpConfig, serializeNodesYaml(checkState), 'utf8');
 
@@ -521,7 +521,7 @@ class TaprootDashboard {
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <link rel="stylesheet" href="${codiconsUri}">
   <link rel="stylesheet" href="${styleUri}">
-  <title>Taproot Nodes</title>
+  <title>Taproot MCP Nodes</title>
 </head>
 <body>
   <div id="app"></div>
@@ -588,7 +588,7 @@ class TaprootNodeItem extends vscode.TreeItem implements TaprootTreeNode {
     this.iconPath = statusThemeIcon(node.status);
     this.command = {
       command: 'taproot.openConfig',
-      title: 'Edit Taproot Node Config',
+      title: 'Edit Taproot MCP Node Config',
       arguments: [node.name],
     };
   }
@@ -601,7 +601,7 @@ class TaprootMessageItem extends vscode.TreeItem {
     this.iconPath = new vscode.ThemeIcon('info');
     this.command = {
       command: 'taproot.openDashboard',
-      title: 'Open Taproot Dashboard',
+      title: 'Open Taproot MCP Dashboard',
     };
   }
 }
@@ -697,7 +697,7 @@ async function commandExists(command: string): Promise<boolean> {
 }
 
 async function writeExpectSshScript(): Promise<string> {
-  const scriptPath = path.join(os.tmpdir(), 'taproot-vscode-ssh-login.exp');
+  const scriptPath = path.join(os.tmpdir(), 'taproot-mcp-ssh-login.exp');
   await fs.writeFile(scriptPath, expectSshScript(), { encoding: 'utf8', mode: 0o700 });
   return scriptPath;
 }
