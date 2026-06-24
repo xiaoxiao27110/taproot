@@ -1133,7 +1133,7 @@ for parsed, path in items:
             if current_digest == self._config_digest:
                 return
 
-            config = load_config(path)
+            config = load_config(path, allow_empty_nodes=True)
             await self._replace_config(config)
             self._config_digest = current_digest
 

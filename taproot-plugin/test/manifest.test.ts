@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, '..', '..');
 test('extension manifest contributes a taproot-mcp activity bar view', async () => {
   const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   const extensionSource = await readFile(path.join(root, 'src', 'extension.ts'), 'utf8');
+  const backendInstallSource = await readFile(path.join(root, 'src', 'backendInstall.ts'), 'utf8');
   const contributes = manifest.contributes;
 
   assert(contributes.viewsContainers.activitybar.some((item: { id: string }) => item.id === 'taproot'));
@@ -25,8 +26,9 @@ test('extension manifest contributes a taproot-mcp activity bar view', async () 
   assert.equal(contributes.configuration.properties['taproot.pythonCommand'].default, '');
   assert(!contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.openDashboard'));
   assert(!contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.testConnections'));
+  assert(contributes.menus.commandPalette.some((item: { command: string }) => item.command === 'taproot.installBackend'));
   assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.openConfig'));
-  assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.installBackend'));
+  assert(!contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.installBackend'));
   assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.startServer'));
   assert(contributes.menus['view/title'].some((item: { command: string }) => item.command === 'taproot.stopServer'));
   assert(contributes.menus['view/item/context'].some((item: { command: string }) => item.command === 'taproot.openNodeTerminal'));
@@ -44,12 +46,16 @@ test('extension manifest contributes a taproot-mcp activity bar view', async () 
   assert(!currentStateBlock.includes('scheduleAutoCheck'));
   assert(extensionSource.includes('dashboard.startStatusPolling();'));
   assert(extensionSource.includes("registerCommand('taproot.installBackend'"));
-  assert(extensionSource.includes("case 'installBackend'"));
-  assert(extensionSource.includes("'pip'"));
+  assert(!extensionSource.includes("case 'installBackend'"));
+  assert(backendInstallSource.includes("'pip'"));
   assert(extensionSource.includes('BUNDLED_BACKEND_WHEEL'));
-  assert(extensionSource.includes('taproot_mcp-0.2.1-py3-none-any.whl'));
+  assert(extensionSource.includes('taproot_mcp-0.2.2-py3-none-any.whl'));
   assert(extensionSource.includes("registerCommand('taproot.startServer'"));
   assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
+  assert(extensionSource.includes("['validate', '--config', configPath]"));
+  assert(extensionSource.includes('waitForHttpServerReady'));
+  assert(extensionSource.includes('managedVenvDir'));
+  assert(extensionSource.includes('Install with --user'));
   assert(extensionSource.includes("'--transport'"));
   assert(extensionSource.includes("'http'"));
   assert(extensionSource.includes("this.post({ type: 'statusUpdate', state: checked });"));

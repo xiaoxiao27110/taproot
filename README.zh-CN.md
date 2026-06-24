@@ -64,15 +64,17 @@ Taproot 不收集 telemetry。不要把 `nodes.yaml`、`.taproot/`、history 文
 
 ## VS Code 扩展
 
-VS Code 扩展是这个包的客户端 UI，不内置 Python MCP server。
+VS Code 扩展是这个包的客户端 UI，并内置用于安装的 Python backend wheel。
 
-先安装 `taproot-mcp`，确保 `taproot-mcp` 命令在 `PATH` 中：
+打开 Taproot 面板并点击 **Install/Update Backend**。如果没有设置 `taproot.pythonCommand`，扩展会在 Linux/macOS 的 `~/.local/share/taproot-mcp/venv` 或 Windows 的 `%APPDATA%/taproot-mcp/venv` 创建/复用受控 Python 3.10+ venv。
+
+也可以手动安装 `taproot-mcp`，确保 `taproot-mcp` 命令在 `PATH` 中：
 
 ```bash
 python -m pip install taproot-mcp
 ```
 
-然后从 VS Code Marketplace 安装 `taproot-mcp` 扩展。如果命令安装在非标准路径，可以设置扩展配置项 `taproot.taprootMcpCommand`。
+如果命令安装在非标准路径，可以设置扩展配置项 `taproot.taprootMcpCommand`。
 
 ## 检查节点
 
@@ -80,6 +82,12 @@ python -m pip install taproot-mcp
 
 ```bash
 taproot-mcp check --config ./nodes.yaml
+```
+
+只校验 YAML schema、不连接 SSH：
+
+```bash
+taproot-mcp validate --config ./nodes.yaml
 ```
 
 ## 运行 Server
@@ -95,6 +103,8 @@ taproot-mcp serve --config ./nodes.yaml
 ```bash
 taproot-mcp serve --config ./nodes.yaml --transport http --host 127.0.0.1 --port 8765
 ```
+
+`serve` 可以在 `nodes: {}` 为空时启动；执行 SSH 操作或连接检查前仍需要添加节点。
 
 ## Codex 注册
 

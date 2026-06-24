@@ -1,5 +1,7 @@
 import inspect
 
+import pytest
+
 from taproot_mcp.config import ClusterConfig, NodeConfig
 from taproot_mcp.models import make_envelope
 from taproot_mcp.server import TaprootTools, build_mcp_server
@@ -63,3 +65,10 @@ def test_mcp_server_builds_with_registered_tools() -> None:
     server = build_mcp_server(TaprootTools(config))
 
     assert server.name == "taproot-mcp"
+
+
+@pytest.mark.asyncio
+async def test_cluster_nodes_allows_empty_inventory() -> None:
+    tools = TaprootTools(ClusterConfig(nodes={}))
+
+    assert await tools.cluster_nodes() == {"nodes": [], "tags": []}

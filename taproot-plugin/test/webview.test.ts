@@ -87,6 +87,7 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert(headerActions);
   assert.equal(headerActions.querySelector('[data-action="testAll"]'), null);
   assert.equal(headerActions.querySelector('[data-action="showConfig"]'), null);
+  assert.equal(headerActions.querySelector('[data-action="installBackend"]'), null);
   const workbench = dom.window.document.querySelector('.taproot-workbench');
   assert(workbench);
   assert.equal(workbench.hasAttribute('data-theme'), false);

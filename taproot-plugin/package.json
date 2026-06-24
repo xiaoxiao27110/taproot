@@ -2,7 +2,7 @@
   "name": "taproot-mcp",
   "displayName": "taproot-mcp",
   "description": "Fleet-level MCP dashboard for SSH clusters: edit nodes.yaml and check taproot-mcp connectivity.",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "publisher": "xiaoxiao27110",
   "license": "SEE LICENSE IN LICENSE",
   "preview": true,
@@ -154,12 +154,12 @@
         "taproot.taprootMcpCommand": {
           "type": "string",
           "default": "taproot-mcp",
-          "description": "Command used to run taproot-mcp for connection checks."
+          "description": "Command used to run taproot-mcp for validation, connection checks, and local server startup."
         },
         "taproot.pythonCommand": {
           "type": "string",
           "default": "",
-          "description": "Python command used when installing or updating the taproot-mcp backend. Empty auto-detects python3/python."
+          "description": "Python command used when installing or updating the taproot-mcp backend. Empty creates or reuses the managed Taproot venv."
         },
         "taproot.statusPollIntervalSeconds": {
           "type": "number",
@@ -206,11 +206,6 @@
         }
       ],
       "view/title": [
-        {
-          "command": "taproot.installBackend",
-          "when": "view == taproot.nodes",
-          "group": "navigation@0"
-        },
         {
           "command": "taproot.startServer",
           "when": "view == taproot.nodes && !taproot.serverRunning",

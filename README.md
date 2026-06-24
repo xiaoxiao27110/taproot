@@ -14,14 +14,14 @@ Install `taproot-mcp` from the VS Code Marketplace.
 
 For Remote-SSH, install it under `SSH: <host>`, not `Local`.
 
-Open the Taproot panel and click **Install/Update Backend**.
+Open the Taproot panel and click **Install/Update Backend**. When `taproot.pythonCommand` is not set, the extension creates a managed Python 3.10+ virtual environment at `~/.local/share/taproot-mcp/venv` on Linux/macOS or `%APPDATA%/taproot-mcp/venv` on Windows.
 
 Taproot runs on the same machine as the agent that connects to it. In a Remote-SSH VS Code window, extension commands run on the SSH host.
 
 CLI-only install, without VS Code:
 
 ```bash
-python -m pip install https://github.com/xiaoxiao27110/taproot/releases/download/v0.2.1/taproot_mcp-0.2.1-py3-none-any.whl
+python -m pip install https://github.com/xiaoxiao27110/taproot/releases/download/v0.2.2/taproot_mcp-0.2.2-py3-none-any.whl
 ```
 
 ### 2. Add nodes
@@ -36,7 +36,7 @@ taproot-mcp check --config /absolute/path/to/nodes.yaml
 
 ### 3. Start the local MCP server
 
-In the Taproot panel or Command Palette, click **Start Local MCP Server**.
+In the Taproot panel or Command Palette, click **Start Local MCP Server**. The server can start with an empty `nodes: {}` config; add nodes before running SSH operations or connection checks.
 
 ### 4. Connect your agent
 

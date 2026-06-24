@@ -50,7 +50,7 @@ def default_config_path() -> Path:
     return Path("~/.config/taproot/nodes.yaml").expanduser()
 
 
-def load_config(path: str | Path | None = None) -> ClusterConfig:
+def load_config(path: str | Path | None = None, *, allow_empty_nodes: bool = False) -> ClusterConfig:
     """Load and validate nodes.yaml, merging defaults into each node."""
 
     config_path = Path(path).expanduser() if path is not None else default_config_path()
@@ -69,7 +69,11 @@ def load_config(path: str | Path | None = None) -> ClusterConfig:
     nodes_raw = raw.get("nodes")
     if not isinstance(defaults, dict):
         raise ConfigError("defaults must be a mapping")
-    if not isinstance(nodes_raw, dict) or not nodes_raw:
+    if nodes_raw is None and allow_empty_nodes:
+        nodes_raw = {}
+    if not isinstance(nodes_raw, dict):
+        raise ConfigError("nodes must be a mapping")
+    if not nodes_raw and not allow_empty_nodes:
         raise ConfigError("nodes must be a non-empty mapping")
 
     nodes: dict[str, NodeConfig] = {}

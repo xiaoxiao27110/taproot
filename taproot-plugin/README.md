@@ -10,7 +10,7 @@ Install `taproot-mcp` from the VS Code Marketplace.
 
 For Remote-SSH, install it under `SSH: <host>`, not `Local`.
 
-Open the Taproot panel and click **Install/Update Backend**.
+Open the Taproot panel and click **Install/Update Backend**. When `taproot.pythonCommand` is not set, the extension creates a managed Python 3.10+ virtual environment at `~/.local/share/taproot-mcp/venv` on Linux/macOS or `%APPDATA%/taproot-mcp/venv` on Windows.
 
 Taproot runs on the same machine as the agent that connects to it. In a Remote-SSH VS Code window, extension commands run on the SSH host.
 
@@ -20,7 +20,7 @@ Open the Taproot panel, add your SSH nodes, then run the connection check from t
 
 ### 3. Start the local MCP server
 
-In the Taproot side bar or Command Palette, click **Start Local MCP Server**.
+In the Taproot side bar or Command Palette, click **Start Local MCP Server**. The server can start with an empty `nodes: {}` config; add nodes before running SSH operations or connection checks.
 
 ### 4. Connect your agent
 
@@ -64,8 +64,8 @@ claude mcp add taproot -- taproot-mcp serve --config /absolute/path/to/nodes.yam
 ## Settings
 
 - `taproot.configPath`: Path to `nodes.yaml`. Empty uses workspace `nodes.yaml`, then `~/.config/taproot/nodes.yaml`.
-- `taproot.taprootMcpCommand`: Command used for `taproot-mcp check`.
-- `taproot.pythonCommand`: Python command used by **Install/Update Backend**. Empty auto-detects Python.
+- `taproot.taprootMcpCommand`: Command used for `taproot-mcp validate`, `check`, and `serve`.
+- `taproot.pythonCommand`: Python command used by **Install/Update Backend**. Empty creates/reuses the managed Taproot venv.
 
 ## Security
 

@@ -2,6 +2,13 @@
 
 All notable changes to Taproot are documented here.
 
+## 0.2.2 - 2026-06-24
+
+- Added schema-only `taproot-mcp validate` for extension startup checks.
+- Allowed `taproot-mcp serve` to start with empty `nodes: {}` configs while keeping `check` strict.
+- Improved VS Code backend install UX with managed venv creation, Python version checks, pip checks, and clearer errors.
+- Added VS Code HTTP server readiness checks before reporting the local MCP server as running.
+
 ## 0.2.1 - 2026-06-23
 
 - Added a VS Code **Install/Update Backend** command and panel button for installing `taproot-mcp`.

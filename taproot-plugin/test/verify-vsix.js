@@ -21,11 +21,13 @@ const entries = new Set(unzip(['-Z1', vsixPath]).trim().split(/\r?\n/).filter(Bo
 const requiredEntries = [
   'extension/package.json',
   'extension/out/src/extension.js',
+  'extension/out/src/backendInstall.js',
   'extension/out/src/configModel.js',
+  'extension/out/src/serverStartup.js',
   'extension/media/icon.png',
   'extension/media/taproot-icons.woff',
   'extension/media/taproot-status.svg',
-  'extension/backend/taproot_mcp-0.2.1-py3-none-any.whl',
+  'extension/backend/taproot_mcp-0.2.2-py3-none-any.whl',
   'extension/node_modules/js-yaml/package.json',
   'extension/node_modules/argparse/package.json',
   'extension/node_modules/@vscode/codicons/dist/codicon.css',
@@ -58,6 +60,8 @@ for (const entry of entries) {
 
 const packagedManifest = readArchiveJson('extension/package.json');
 const commands = packagedManifest.contributes?.commands?.map((command) => command.command) || [];
+const commandPalette = packagedManifest.contributes?.menus?.commandPalette?.map((item) => item.command) || [];
+const viewTitle = packagedManifest.contributes?.menus?.['view/title']?.map((item) => item.command) || [];
 assert.equal(packagedManifest.main, './out/src/extension.js');
 assert.equal(packagedManifest.repository?.url, 'https://github.com/xiaoxiao27110/taproot.git');
 assert.equal(packagedManifest.preview, true);
@@ -72,12 +76,17 @@ assert(commands.includes('taproot.refreshNodes'));
 assert(commands.includes('taproot.installBackend'));
 assert(commands.includes('taproot.startServer'));
 assert(commands.includes('taproot.stopServer'));
+assert(commandPalette.includes('taproot.installBackend'));
+assert(!viewTitle.includes('taproot.installBackend'));
 
 const extensionSource = unzip(['-p', vsixPath, 'extension/out/src/extension.js']);
 assert(extensionSource.includes("registerCommand('taproot.refreshNodes'"));
 assert(extensionSource.includes("registerCommand('taproot.installBackend'"));
-assert(extensionSource.includes("case 'installBackend'"));
-assert(extensionSource.includes('taproot_mcp-0.2.1-py3-none-any.whl'));
+assert(!extensionSource.includes("case 'installBackend'"));
+assert(extensionSource.includes('taproot_mcp-0.2.2-py3-none-any.whl'));
+assert(extensionSource.includes("['validate', '--config', configPath]"));
+assert(extensionSource.includes('waitForHttpServerReady'));
+assert(extensionSource.includes('Install with --user'));
 assert(extensionSource.includes("registerCommand('taproot.startServer'"));
 assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
 assert.equal(packagedManifest.name, 'taproot-mcp');

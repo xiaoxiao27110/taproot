@@ -30,6 +30,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if namespace.command == "check":
             return asyncio.run(_check(namespace.config, namespace.timeout))
+        if namespace.command == "validate":
+            return _validate(namespace.config, namespace.require_nodes)
         if namespace.command == "history":
             return _history(namespace.config, namespace.node, namespace.limit)
         if namespace.command == "approvals":
@@ -64,6 +66,14 @@ def _build_parser() -> argparse.ArgumentParser:
     check.add_argument("--config", help="path to nodes.yaml")
     check.add_argument("--timeout", type=float, default=10.0, help="per-node SSH timeout")
 
+    validate = subparsers.add_parser("validate", help="validate config without SSH connectivity")
+    validate.add_argument("--config", help="path to nodes.yaml")
+    validate.add_argument(
+        "--require-nodes",
+        action="store_true",
+        help="reject configs with no configured nodes",
+    )
+
     history = subparsers.add_parser("history", help="print recent MCP operation history")
     history.add_argument("--config", help="path to nodes.yaml")
     history.add_argument("--node", help="only include one node")
@@ -94,10 +104,18 @@ def _build_parser() -> argparse.ArgumentParser:
 def _serve(config_path: str | None, transport: str, host: str, port: int) -> int:
     """Start the MCP server with the selected transport."""
 
-    config = load_config(config_path)
+    config = load_config(config_path, allow_empty_nodes=True)
     tools = TaprootTools(config)
     server = build_mcp_server(tools, host=host, port=port)
     server.run(transport="streamable-http" if transport == "http" else "stdio")
+    return 0
+
+
+def _validate(config_path: str | None, require_nodes: bool) -> int:
+    """Validate config shape without opening SSH connections."""
+
+    config = load_config(config_path, allow_empty_nodes=not require_nodes)
+    print(f"config ok: {len(config.nodes)} node(s)")
     return 0
 
 

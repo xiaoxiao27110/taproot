@@ -5,6 +5,18 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import {
+  CommandSpec,
+  checkPythonPip,
+  formatPipFailure,
+  managedVenvDir,
+  managedVenvPython,
+  managedVenvTaprootCommand,
+  pythonUsesVirtualEnv,
+  resolvePythonCommand,
+  summarizeProcessError,
+  taprootInstallArgs,
+} from './backendInstall';
+import {
   DashboardState,
   defaultConfigPath,
   emptyState,
@@ -17,6 +29,7 @@ import {
   stateForSerialization,
   validateState,
 } from './configModel';
+import { waitForHttpServerReady } from './serverStartup';
 
 interface WebviewMessage {
   type: string;
@@ -30,7 +43,7 @@ interface TaprootTreeNode {
   nodeName?: string;
 }
 
-const BUNDLED_BACKEND_WHEEL = 'taproot_mcp-0.2.1-py3-none-any.whl';
+const BUNDLED_BACKEND_WHEEL = 'taproot_mcp-0.2.2-py3-none-any.whl';
 
 export function activate(context: vscode.ExtensionContext): void {
   const dashboard = new TaprootDashboard(context);
@@ -193,9 +206,30 @@ class TaprootDashboard {
 
   async installBackend(): Promise<void> {
     try {
-      const python = await resolvePythonCommand(this.pythonCommand());
       const installSource = await this.backendInstallSource();
+      const configuredPython = this.pythonCommand();
+      const configuredManagedPython = configuredPython
+        ? path.resolve(expandHome(configuredPython)) === path.resolve(managedVenvPython(managedVenvDir()))
+        : false;
+      let python: CommandSpec | undefined;
+      let managedInstall = false;
+      let useUserInstall = false;
       let installedCommand = '';
+
+      if (configuredPython && !configuredManagedPython) {
+        python = await resolvePythonCommand(configuredPython, installSource, runProcess, { requirePip: true });
+        if (!(await pythonUsesVirtualEnv(python, runProcess))) {
+          const confirmed = await this.confirmUserInstall(python);
+          if (!confirmed) {
+            throw new Error(
+              'Installation cancelled. Recommended: create/use a Python 3.10+ virtual environment, ' +
+                'or clear taproot.pythonCommand to let Taproot create a managed venv.',
+            );
+          }
+          useUserInstall = true;
+        }
+      }
+
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -203,15 +237,29 @@ class TaprootDashboard {
           cancellable: false,
         },
         async () => {
+          if (!python) {
+            managedInstall = true;
+            python = await this.ensureManagedVenv(installSource);
+          }
+          await checkPythonPip(python, runProcess).catch((error) => {
+            throw new Error(formatPipFailure(error));
+          });
           await runProcess(
             python.command,
-            [...python.args, ...(await taprootInstallArgs(python, installSource))],
+            [...python.args, ...taprootInstallArgs(installSource, useUserInstall)],
             180_000,
-          );
-          installedCommand = await resolveInstalledTaprootCommand(python);
+          ).catch((error) => {
+            throw new Error(`pip install failed: ${summarizeProcessError(error)}`);
+          });
+          installedCommand = managedInstall
+            ? managedVenvTaprootCommand(managedVenvDir())
+            : await resolveInstalledTaprootCommand(python);
         },
       );
 
+      if (managedInstall && python) {
+        await this.configurePythonCommand(python.command);
+      }
       if (installedCommand) {
         await this.configureTaprootCommand(installedCommand);
       }
@@ -251,6 +299,20 @@ class TaprootDashboard {
     }
 
     const command = this.taprootCommand();
+    try {
+      await runProcess(command, ['validate', '--config', configPath], 10_000);
+    } catch (error) {
+      const message = [
+        `Taproot config validation failed: ${summarizeProcessError(error)}.`,
+        'Run Install/Update Backend if this command does not recognize "validate".',
+      ].join(' ');
+      const action = await vscode.window.showErrorMessage(message, 'Open Config');
+      if (action === 'Open Config') {
+        await this.openConfig();
+      }
+      return;
+    }
+
     const args = [
       'serve',
       '--config',
@@ -262,6 +324,7 @@ class TaprootDashboard {
       '--port',
       String(this.httpPort()),
     ];
+    let ready = false;
     const child = cp.spawn(command, args, {
       shell: process.platform === 'win32',
       windowsHide: true,
@@ -286,11 +349,28 @@ class TaprootDashboard {
       }
       if (code !== null && code !== 0) {
         const detail = output.trim();
-        vscode.window.showErrorMessage(`Taproot MCP server exited (${code})${detail ? `: ${detail}` : ''}`);
+        if (ready) {
+          vscode.window.showErrorMessage(`Taproot MCP server exited (${code})${detail ? `: ${detail}` : ''}`);
+        }
       }
     });
 
     this.serverProcess = child;
+    try {
+      await waitForHttpServerReady(this.serverUrl(), child, 10_000);
+      ready = true;
+    } catch (error) {
+      if (this.serverProcess === child) {
+        this.serverProcess = undefined;
+      }
+      child.kill();
+      await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+      const detail = output.trim();
+      vscode.window.showErrorMessage(
+        `Taproot MCP server failed to start: ${summarizeProcessError(error)}${detail ? `: ${summarizeProcessError(detail)}` : ''}`,
+      );
+      return;
+    }
     await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', true);
     vscode.window.showInformationMessage(`Taproot MCP server started: ${this.serverUrl()}`);
   }
@@ -330,9 +410,6 @@ class TaprootDashboard {
           if (this.lastState) {
             this.scheduleAutoCheck(this.lastState);
           }
-          break;
-        case 'installBackend':
-          await this.installBackend();
           break;
         case 'testConnections':
           await this.runConnectionCheck(requiredState(message));
@@ -647,6 +724,62 @@ class TaprootDashboard {
     }
   }
 
+  private async ensureManagedVenv(installSource: string): Promise<CommandSpec> {
+    const venvDir = managedVenvDir();
+    const venvPython = managedVenvPython(venvDir);
+    try {
+      await fs.access(venvPython);
+      return await resolvePythonCommand(venvPython, installSource, runProcess, { requirePip: true });
+    } catch {
+      await fs.rm(venvDir, { recursive: true, force: true });
+    }
+
+    const basePython = await resolvePythonCommand('', installSource, runProcess);
+    await fs.mkdir(path.dirname(venvDir), { recursive: true });
+    try {
+      await runProcess(basePython.command, [...basePython.args, '-m', 'venv', venvDir], 120_000);
+    } catch (error) {
+      throw new Error(`Failed to create managed venv at ${venvDir}: ${summarizeProcessError(error)}`);
+    }
+
+    try {
+      return await resolvePythonCommand(venvPython, installSource, runProcess, { requirePip: true });
+    } catch (error) {
+      throw new Error(`Managed venv is not usable at ${venvDir}: ${summarizeProcessError(error)}`);
+    }
+  }
+
+  private async confirmUserInstall(python: CommandSpec): Promise<boolean> {
+    const choice = await vscode.window.showWarningMessage(
+      [
+        `Selected Python is not a virtual environment: ${python.command}.`,
+        'Install taproot-mcp into the user site with --user?',
+        'Recommended: use a Python 3.10+ virtual environment, or clear taproot.pythonCommand to use the managed venv.',
+      ].join(' '),
+      { modal: true },
+      'Install with --user',
+    );
+    return choice === 'Install with --user';
+  }
+
+  private async configurePythonCommand(commandPath: string): Promise<void> {
+    try {
+      await fs.access(commandPath);
+    } catch {
+      return;
+    }
+    const configuration = vscode.workspace.getConfiguration('taproot');
+    const configured = configuration.get<string>('pythonCommand')?.trim();
+    if (configured) {
+      return;
+    }
+    const inspected = configuration.inspect<string>('pythonCommand');
+    const target = inspected?.workspaceValue !== undefined || inspected?.workspaceFolderValue !== undefined
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await configuration.update('pythonCommand', commandPath, target);
+  }
+
   private async configureTaprootCommand(commandPath: string): Promise<void> {
     try {
       await fs.access(commandPath);
@@ -766,11 +899,6 @@ class TaprootNodesProvider implements vscode.TreeDataProvider<TaprootTreeItem> {
 
 type TaprootTreeItem = TaprootNodeItem | TaprootMessageItem;
 
-interface CommandSpec {
-  command: string;
-  args: string[];
-}
-
 class TaprootNodeItem extends vscode.TreeItem implements TaprootTreeNode {
   readonly nodeName: string;
 
@@ -848,63 +976,6 @@ function runProcess(command: string, args: string[], timeoutMs: number): Promise
         reject(new Error((stderr || stdout || `${command} exited ${code}`).trim()));
       }
     });
-  });
-}
-
-async function resolvePythonCommand(configuredCommand: string): Promise<CommandSpec> {
-  const candidates = pythonCandidates(configuredCommand);
-  for (const candidate of candidates) {
-    try {
-      await runProcess(candidate.command, [...candidate.args, '-c', 'import sys; print(sys.executable)'], 10_000);
-      return candidate;
-    } catch {
-      // Try the next common Python launcher.
-    }
-  }
-  throw new Error('No Python command found. Install Python or set taproot.pythonCommand.');
-}
-
-async function taprootInstallArgs(python: CommandSpec, installSource: string): Promise<string[]> {
-  const args = ['-m', 'pip', 'install', '--upgrade'];
-  if (!(await pythonUsesVirtualEnv(python))) {
-    args.push('--user');
-  }
-  args.push(installSource);
-  return args;
-}
-
-async function pythonUsesVirtualEnv(python: CommandSpec): Promise<boolean> {
-  const code = 'import sys; print(int(getattr(sys, "base_prefix", sys.prefix) != sys.prefix))';
-  try {
-    const output = await runProcess(python.command, [...python.args, '-c', code], 10_000);
-    return output.stdout.trim().split(/\r?\n/).pop() === '1';
-  } catch {
-    return false;
-  }
-}
-
-function pythonCandidates(configuredCommand: string): CommandSpec[] {
-  const candidates: CommandSpec[] = [];
-  if (configuredCommand) {
-    candidates.push({ command: expandHome(configuredCommand), args: [] });
-  }
-  if (process.platform === 'win32') {
-    candidates.push({ command: 'py', args: ['-3'] });
-    candidates.push({ command: 'python', args: [] });
-    candidates.push({ command: 'python3', args: [] });
-  } else {
-    candidates.push({ command: 'python3', args: [] });
-    candidates.push({ command: 'python', args: [] });
-  }
-
-  const seen = new Set<string>();
-  return candidates.filter((candidate) => {
-    const key = `${candidate.command}\0${candidate.args.join('\0')}`;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
   });
 }
 
