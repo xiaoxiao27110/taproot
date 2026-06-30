@@ -208,12 +208,12 @@
         },
         {
           "command": "taproot.startServer",
-          "when": "view == taproot.nodes && !taproot.serverRunning",
+          "when": "view == taproot.nodes && taproot.serverStatusKnown && !taproot.serverRunning",
           "group": "navigation@2"
         },
         {
           "command": "taproot.stopServer",
-          "when": "view == taproot.nodes && taproot.serverRunning",
+          "when": "view == taproot.nodes && taproot.serverStatusKnown && taproot.serverRunning",
           "group": "navigation@2"
         },
         {

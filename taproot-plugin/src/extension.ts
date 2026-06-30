@@ -21,7 +21,7 @@ import {
 } from './configModel';
 import { loadPendingApprovals, updateApprovalDecision } from './approvalModel';
 import { summarizeProcessError } from './processError';
-import { waitForHttpServerReady } from './serverStartup';
+import { isTcpPortOpen, waitForHttpServerReady } from './serverStartup';
 
 interface WebviewMessage {
   type: string;
@@ -41,7 +41,8 @@ const BACKEND_RELEASE_URL = 'https://github.com/xiaoxiao27110/taproot/releases/l
 
 export function activate(context: vscode.ExtensionContext): void {
   const dashboard = new TaprootDashboard(context);
-  void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+  void vscode.commands.executeCommand('setContext', 'taproot.serverStatusKnown', false);
+  void dashboard.syncServerRunningContext();
   dashboard.startStatusPolling();
   const treeProvider = new TaprootNodesProvider(dashboard);
   const treeView = vscode.window.createTreeView('taproot.nodes', {
@@ -198,9 +199,16 @@ class TaprootDashboard {
     await this.copySsh(await this.loadState(), nodeName);
   }
 
+  async syncServerRunningContext(): Promise<boolean> {
+    const running = await this.configuredServerRunning();
+    await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', running);
+    await vscode.commands.executeCommand('setContext', 'taproot.serverStatusKnown', true);
+    return running;
+  }
+
   async startHttpServer(options: { announce?: boolean } = {}): Promise<boolean> {
     const announce = options.announce ?? true;
-    if (this.serverProcess) {
+    if (await this.configuredServerRunning()) {
       if (announce) {
         vscode.window.showInformationMessage(`Taproot MCP server is already running at ${this.serverUrl()}`);
       }
@@ -268,22 +276,22 @@ class TaprootDashboard {
     });
     child.on('error', (error) => {
       this.serverProcess = undefined;
-      void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+      void this.syncServerRunningContext();
       void this.refreshUiState();
       vscode.window.showErrorMessage(`Taproot MCP server failed to start: ${formatError(error)}`);
     });
     child.on('close', (code) => {
-      if (this.serverProcess === child) {
-        this.serverProcess = undefined;
-        void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
-        void this.refreshUiState();
-      }
-      if (code !== null && code !== 0) {
-        const detail = output.trim();
-        if (ready) {
+      void (async () => {
+        if (this.serverProcess === child) {
+          this.serverProcess = undefined;
+          await this.syncServerRunningContext();
+          await this.refreshUiState();
+        }
+        if (code !== null && code !== 0 && ready && !(await this.configuredServerRunning())) {
+          const detail = output.trim();
           vscode.window.showErrorMessage(`Taproot MCP server exited (${code})${detail ? `: ${detail}` : ''}`);
         }
-      }
+      })();
     });
 
     this.serverProcess = child;
@@ -295,7 +303,15 @@ class TaprootDashboard {
         this.serverProcess = undefined;
       }
       child.kill();
-      await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+      if (await this.configuredServerRunning()) {
+        await this.syncServerRunningContext();
+        await this.refreshUiState();
+        if (announce) {
+          vscode.window.showInformationMessage(`Taproot MCP server is already running at ${this.serverUrl()}`);
+        }
+        return true;
+      }
+      await this.syncServerRunningContext();
       const detail = output.trim();
       vscode.window.showErrorMessage(
         `Taproot MCP server failed to start: ${summarizeProcessError(error)}${detail ? `: ${summarizeProcessError(detail)}` : ''}`,
@@ -303,7 +319,7 @@ class TaprootDashboard {
       await this.refreshUiState();
       return false;
     }
-    await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', true);
+    await this.syncServerRunningContext();
     await this.refreshUiState();
     if (announce) {
       vscode.window.showInformationMessage(`Taproot MCP server started: ${this.serverUrl()}`);
@@ -314,8 +330,16 @@ class TaprootDashboard {
   async stopHttpServer(options: { silent?: boolean } = {}): Promise<void> {
     const child = this.serverProcess;
     if (!child) {
+      const running = await this.syncServerRunningContext();
+      await this.refreshUiState();
       if (!options.silent) {
-        vscode.window.showInformationMessage('Taproot MCP server is not running.');
+        if (running) {
+          vscode.window.showInformationMessage(
+            `Taproot MCP server is running at ${this.serverUrl()}, but it was not started by this VS Code extension. Stop the process that launched it.`,
+          );
+        } else {
+          vscode.window.showInformationMessage('Taproot MCP server is not running.');
+        }
       }
       return;
     }
@@ -395,11 +419,12 @@ class TaprootDashboard {
   private async loadState(): Promise<DashboardState> {
     const configPath = this.resolveConfigPath();
     const backend = await this.checkBackend();
+    const server = await this.localServerState();
     try {
       const text = await fs.readFile(configPath, 'utf8');
       const state = {
         ...parseNodesYaml(text, configPath, backend),
-        server: this.localServerState(),
+        server,
         activities: await this.loadHistory(configPath),
         approvals: await loadPendingApprovals(configPath),
       };
@@ -410,7 +435,7 @@ class TaprootDashboard {
       if (err.code === 'ENOENT') {
         const state = {
           ...emptyState(configPath, backend),
-          server: this.localServerState(),
+          server,
         };
         this.lastState = state;
         return state;
@@ -419,7 +444,7 @@ class TaprootDashboard {
       }
       const state = {
         ...emptyState(configPath, backend),
-        server: this.localServerState(),
+        server,
       };
       this.lastState = state;
       return state;
@@ -478,7 +503,7 @@ class TaprootDashboard {
 
     await fs.mkdir(path.dirname(state.configPath), { recursive: true });
     await fs.writeFile(state.configPath, serializeNodesYaml(state), 'utf8');
-    const saved = { ...state, server: this.localServerState() };
+    const saved = { ...state, server: await this.localServerState() };
     this.lastState = saved;
     this.post({ type: 'saved', state: saved, message: `已保存 ${state.configPath}` });
     this.stateEmitter.fire();
@@ -536,7 +561,7 @@ class TaprootDashboard {
       });
       const checked = {
         ...state,
-        server: this.localServerState(),
+        server: await this.localServerState(),
         nodes,
         backend: await this.checkBackend(),
         activities: await this.loadHistory(state.configPath),
@@ -679,11 +704,18 @@ class TaprootDashboard {
     return defaultConfigPath();
   }
 
-  private localServerState(): DashboardState['server'] {
+  private async localServerState(): Promise<DashboardState['server']> {
     return {
-      running: Boolean(this.serverProcess),
+      running: await this.syncServerRunningContext(),
       url: this.serverUrl(),
     };
+  }
+
+  private async configuredServerRunning(): Promise<boolean> {
+    if (this.serverProcess && this.serverProcess.exitCode === null) {
+      return true;
+    }
+    return isTcpPortOpen(this.httpHost(), this.httpPort());
   }
 
   private async refreshUiState(): Promise<void> {
