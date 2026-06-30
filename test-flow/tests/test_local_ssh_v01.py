@@ -32,7 +32,10 @@ async def tools():
 
 
 def approve_result(config: ClusterConfig, result: dict, node: str) -> None:
-    ApprovalStore(config).approve(result["results"][node]["approval_id"])
+    assert result["results"][node]["approval_required"] is True
+    pending = ApprovalStore(config).list(status="pending")
+    assert pending
+    ApprovalStore(config).approve(pending[0]["id"])
 
 
 async def test_exec_targeting_and_stateless_cwd(tools: TaprootTools) -> None:

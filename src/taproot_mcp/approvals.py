@@ -14,6 +14,7 @@ from taproot_mcp.config import ClusterConfig
 
 APPROVALS_FILE = "approvals.json"
 SENSITIVE_KEYS = {"password", "sudo_password", "content", "old_str", "new_str"}
+CLI_APPROVAL_ENV = "TAPROOT_ENABLE_CLI_APPROVAL"
 
 
 class ApprovalError(ValueError):
@@ -57,7 +58,7 @@ class ApprovalStore:
             "status": "pending",
             "tool": tool,
             "target": target,
-            "details": _safe_details(details),
+            "details": _display_details(details),
             "created_at": now,
             "updated_at": now,
         }
@@ -71,7 +72,11 @@ class ApprovalStore:
         op_hash = operation_hash(tool, target, details)
         records = self._read()
         for record in records:
-            if record.get("op_hash") == op_hash and record.get("status") == "approved":
+            if record.get("op_hash") != op_hash:
+                continue
+            if record.get("status") == "remembered":
+                return record
+            if record.get("status") == "approved":
                 record["status"] = "consumed"
                 record["consumed_at"] = _now()
                 record["updated_at"] = record["consumed_at"]
@@ -96,6 +101,11 @@ class ApprovalStore:
         """Mark a pending approval as rejected."""
 
         return self._set_status(approval_id, "rejected")
+
+    def remember(self, approval_id: str) -> dict[str, Any]:
+        """Remember a pending approval for matching future operations."""
+
+        return self._set_status(approval_id, "remembered")
 
     def _set_status(self, approval_id: str, status: str) -> dict[str, Any]:
         records = self._read()
@@ -138,19 +148,40 @@ def operation_hash(tool: str, target: str, details: dict[str, Any]) -> str:
     payload = {
         "tool": tool,
         "target": target,
-        "details": _safe_details(details),
+        "details": _hash_details(details),
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _safe_details(details: dict[str, Any]) -> dict[str, Any]:
+def _display_details(details: dict[str, Any]) -> dict[str, Any]:
     safe: dict[str, Any] = {}
     for key, value in details.items():
         if key in SENSITIVE_KEYS:
+            if key not in {"password", "sudo_password"} and value not in {None, ""}:
+                safe[f"{key}_sha256"] = _value_digest(value)
             continue
         safe[key] = value
     return safe
+
+
+def _hash_details(details: dict[str, Any]) -> dict[str, Any]:
+    hashed: dict[str, Any] = {}
+    for key, value in details.items():
+        if key in {"password", "sudo_password"}:
+            continue
+        if key in SENSITIVE_KEYS:
+            hashed[f"{key}_sha256"] = _value_digest(value)
+        elif key == "command" and isinstance(value, str):
+            hashed[key] = " ".join(value.split())
+        else:
+            hashed[key] = value
+    return hashed
+
+
+def _value_digest(value: Any) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _now() -> str:

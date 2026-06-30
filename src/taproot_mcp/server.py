@@ -903,9 +903,8 @@ print(digest.hexdigest())
         """Return a standard per-node approval-required result."""
 
         return error_result(
-            f"approval required: run taproot-mcp approvals approve {approval['id']}",
+            "approval required: review the pending request in the Taproot dashboard",
             approval_required=True,
-            approval_id=approval["id"],
         )
 
     async def _authorize_remote_path(

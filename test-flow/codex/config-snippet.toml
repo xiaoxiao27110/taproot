@@ -1,4 +1,2 @@
 [mcp_servers.taproot-local]
-command = "taproot-mcp"
-args = ["serve", "--config", "/tmp/taproot-nodes.localhost.yaml"]
-env = {}
+url = "http://127.0.0.1:8765/mcp"

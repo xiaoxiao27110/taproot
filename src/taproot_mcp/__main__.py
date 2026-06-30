@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from typing import Sequence
 
-from taproot_mcp.approvals import ApprovalError, ApprovalStore
+from taproot_mcp.approvals import CLI_APPROVAL_ENV, ApprovalError, ApprovalStore
 from taproot_mcp.config import ConfigError, load_config
 from taproot_mcp.history import read_history
 from taproot_mcp.server import TaprootTools, build_mcp_server
@@ -86,13 +87,20 @@ def _build_parser() -> argparse.ArgumentParser:
     approvals_list.add_argument("--config", help="path to nodes.yaml")
     approvals_list.add_argument(
         "--status",
-        choices=["pending", "approved", "rejected", "consumed"],
+        choices=["pending", "approved", "remembered", "rejected", "consumed"],
         help="only show approvals with this status",
     )
 
     approvals_approve = approval_subparsers.add_parser("approve", help="approve one pending operation")
     approvals_approve.add_argument("--config", help="path to nodes.yaml")
     approvals_approve.add_argument("id", help="approval id")
+
+    approvals_remember = approval_subparsers.add_parser(
+        "remember",
+        help="remember one pending operation for matching future requests",
+    )
+    approvals_remember.add_argument("--config", help="path to nodes.yaml")
+    approvals_remember.add_argument("id", help="approval id")
 
     approvals_reject = approval_subparsers.add_parser("reject", help="reject one pending operation")
     approvals_reject.add_argument("--config", help="path to nodes.yaml")
@@ -135,13 +143,28 @@ def _approvals(namespace: argparse.Namespace) -> int:
     if namespace.approval_command == "list":
         payload = store.list(status=namespace.status)
     elif namespace.approval_command == "approve":
+        _require_cli_approval_enabled()
         payload = store.approve(namespace.id)
+    elif namespace.approval_command == "remember":
+        _require_cli_approval_enabled()
+        payload = store.remember(namespace.id)
     elif namespace.approval_command == "reject":
+        _require_cli_approval_enabled()
         payload = store.reject(namespace.id)
     else:
         raise ApprovalError(f"unknown approvals command: {namespace.approval_command}")
     print(json.dumps(payload, ensure_ascii=False))
     return 0
+
+
+def _require_cli_approval_enabled() -> None:
+    """Require an explicit opt-in before mutating approvals from the CLI."""
+
+    if os.environ.get(CLI_APPROVAL_ENV) != "1":
+        raise ApprovalError(
+            f"CLI approval changes are disabled by default; use the Taproot dashboard "
+            f"or set {CLI_APPROVAL_ENV}=1 for an explicit local override"
+        )
 
 
 async def _check(config_path: str | None, timeout: float) -> int:

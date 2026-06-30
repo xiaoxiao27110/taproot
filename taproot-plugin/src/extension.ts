@@ -4,19 +4,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
+import { buildAgentPrompt } from './agentPrompt';
 import {
-  CommandSpec,
-  checkPythonPip,
-  formatPipFailure,
-  managedVenvDir,
-  managedVenvPython,
-  managedVenvTaprootCommand,
-  pythonUsesVirtualEnv,
-  resolvePythonCommand,
-  summarizeProcessError,
-  taprootInstallArgs,
-} from './backendInstall';
-import {
+  ApprovalDecision,
   DashboardState,
   defaultConfigPath,
   emptyState,
@@ -29,12 +19,16 @@ import {
   stateForSerialization,
   validateState,
 } from './configModel';
+import { loadPendingApprovals, updateApprovalDecision } from './approvalModel';
+import { summarizeProcessError } from './processError';
 import { waitForHttpServerReady } from './serverStartup';
 
 interface WebviewMessage {
   type: string;
   state?: DashboardState;
   nodeName?: string;
+  approvalId?: string;
+  approvalDecision?: ApprovalDecision;
   command?: string;
   view?: 'config' | 'detail';
 }
@@ -43,7 +37,7 @@ interface TaprootTreeNode {
   nodeName?: string;
 }
 
-const BUNDLED_BACKEND_WHEEL = 'taproot_mcp-0.2.2-py3-none-any.whl';
+const BACKEND_RELEASE_URL = 'https://github.com/xiaoxiao27110/taproot/releases/latest';
 
 export function activate(context: vscode.ExtensionContext): void {
   const dashboard = new TaprootDashboard(context);
@@ -70,9 +64,9 @@ export function activate(context: vscode.ExtensionContext): void {
       treeProvider.refresh();
     }),
     vscode.commands.registerCommand('taproot.refreshNodes', () => dashboard.reloadState()),
-    vscode.commands.registerCommand('taproot.installBackend', () => dashboard.installBackend()),
     vscode.commands.registerCommand('taproot.startServer', () => dashboard.startHttpServer()),
     vscode.commands.registerCommand('taproot.stopServer', () => dashboard.stopHttpServer()),
+    vscode.commands.registerCommand('taproot.copyAgentPrompt', () => dashboard.copyAgentPrompt()),
     vscode.commands.registerCommand('taproot.openNodeTerminal', async (item?: TaprootTreeNode) => {
       await dashboard.openTerminalForNode(item?.nodeName);
     }),
@@ -204,95 +198,30 @@ class TaprootDashboard {
     await this.copySsh(await this.loadState(), nodeName);
   }
 
-  async installBackend(): Promise<void> {
-    try {
-      const installSource = await this.backendInstallSource();
-      const configuredPython = this.pythonCommand();
-      const configuredManagedPython = configuredPython
-        ? path.resolve(expandHome(configuredPython)) === path.resolve(managedVenvPython(managedVenvDir()))
-        : false;
-      let python: CommandSpec | undefined;
-      let managedInstall = false;
-      let useUserInstall = false;
-      let installedCommand = '';
-
-      if (configuredPython && !configuredManagedPython) {
-        python = await resolvePythonCommand(configuredPython, installSource, runProcess, { requirePip: true });
-        if (!(await pythonUsesVirtualEnv(python, runProcess))) {
-          const confirmed = await this.confirmUserInstall(python);
-          if (!confirmed) {
-            throw new Error(
-              'Installation cancelled. Recommended: create/use a Python 3.10+ virtual environment, ' +
-                'or clear taproot.pythonCommand to let Taproot create a managed venv.',
-            );
-          }
-          useUserInstall = true;
-        }
-      }
-
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: '正在安装/更新 Taproot 后端',
-          cancellable: false,
-        },
-        async () => {
-          if (!python) {
-            managedInstall = true;
-            python = await this.ensureManagedVenv(installSource);
-          }
-          await checkPythonPip(python, runProcess).catch((error) => {
-            throw new Error(formatPipFailure(error));
-          });
-          await runProcess(
-            python.command,
-            [...python.args, ...taprootInstallArgs(installSource, useUserInstall)],
-            180_000,
-          ).catch((error) => {
-            throw new Error(`pip install failed: ${summarizeProcessError(error)}`);
-          });
-          installedCommand = managedInstall
-            ? managedVenvTaprootCommand(managedVenvDir())
-            : await resolveInstalledTaprootCommand(python);
-        },
-      );
-
-      if (managedInstall && python) {
-        await this.configurePythonCommand(python.command);
-      }
-      if (installedCommand) {
-        await this.configureTaprootCommand(installedCommand);
-      }
-
-      const state = await this.loadState();
-      await this.postState(state);
-      const message = installedCommand
-        ? `Taproot 后端已安装: ${installedCommand}`
-        : 'Taproot 后端已安装。如果面板仍然找不到 taproot-mcp，请设置 taproot.taprootMcpCommand。';
-      this.post({ type: 'backendInstalled', state, message });
-      this.stateEmitter.fire();
-      vscode.window.showInformationMessage(message);
-    } catch (error) {
-      const message = `Taproot 后端安装失败: ${formatError(error)}`;
-      this.post({ type: 'error', message });
-      vscode.window.showErrorMessage(message);
-    }
-  }
-
-  async startHttpServer(): Promise<void> {
+  async startHttpServer(options: { announce?: boolean } = {}): Promise<boolean> {
+    const announce = options.announce ?? true;
     if (this.serverProcess) {
-      vscode.window.showInformationMessage(`Taproot MCP server is already running at ${this.serverUrl()}`);
-      return;
+      if (announce) {
+        vscode.window.showInformationMessage(`Taproot MCP server is already running at ${this.serverUrl()}`);
+      }
+      await this.refreshUiState();
+      return true;
     }
 
     const configPath = this.resolveConfigPath();
-    await fs.mkdir(path.dirname(configPath), { recursive: true });
     try {
       await fs.access(configPath);
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') {
-        await this.createInitialConfig(emptyState(configPath, await this.checkBackend()));
+        const action = await vscode.window.showErrorMessage(
+          `Taproot config not found: ${configPath}. Save nodes first, then start the MCP server.`,
+          'Open Config',
+        );
+        if (action === 'Open Config') {
+          await this.openConfig();
+        }
+        return false;
       } else {
         throw error;
       }
@@ -304,13 +233,13 @@ class TaprootDashboard {
     } catch (error) {
       const message = [
         `Taproot config validation failed: ${summarizeProcessError(error)}.`,
-        'Run Install/Update Backend if this command does not recognize "validate".',
+        '确认 taproot.taprootMcpCommand 指向可用的 taproot-mcp；需要安装时请复制 Agent 提示词交给 Agent 处理。',
       ].join(' ');
       const action = await vscode.window.showErrorMessage(message, 'Open Config');
       if (action === 'Open Config') {
         await this.openConfig();
       }
-      return;
+      return false;
     }
 
     const args = [
@@ -340,12 +269,14 @@ class TaprootDashboard {
     child.on('error', (error) => {
       this.serverProcess = undefined;
       void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+      void this.refreshUiState();
       vscode.window.showErrorMessage(`Taproot MCP server failed to start: ${formatError(error)}`);
     });
     child.on('close', (code) => {
       if (this.serverProcess === child) {
         this.serverProcess = undefined;
         void vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+        void this.refreshUiState();
       }
       if (code !== null && code !== 0) {
         const detail = output.trim();
@@ -369,10 +300,15 @@ class TaprootDashboard {
       vscode.window.showErrorMessage(
         `Taproot MCP server failed to start: ${summarizeProcessError(error)}${detail ? `: ${summarizeProcessError(detail)}` : ''}`,
       );
-      return;
+      await this.refreshUiState();
+      return false;
     }
     await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', true);
-    vscode.window.showInformationMessage(`Taproot MCP server started: ${this.serverUrl()}`);
+    await this.refreshUiState();
+    if (announce) {
+      vscode.window.showInformationMessage(`Taproot MCP server started: ${this.serverUrl()}`);
+    }
+    return true;
   }
 
   async stopHttpServer(options: { silent?: boolean } = {}): Promise<void> {
@@ -386,8 +322,27 @@ class TaprootDashboard {
     this.serverProcess = undefined;
     child.kill();
     await vscode.commands.executeCommand('setContext', 'taproot.serverRunning', false);
+    await this.refreshUiState();
     if (!options.silent) {
       vscode.window.showInformationMessage('Taproot MCP server stopped.');
+    }
+  }
+
+  async copyAgentPrompt(options: { announce?: boolean } = {}): Promise<void> {
+    const announce = options.announce ?? true;
+    const prompt = buildAgentPrompt({
+      configPath: this.resolveConfigPath(),
+      releaseUrl: BACKEND_RELEASE_URL,
+      remoteName: vscode.env.remoteName,
+      serverUrl: this.serverUrl(),
+      taprootCommand: this.taprootCommand(),
+    });
+    await vscode.env.clipboard.writeText(prompt);
+    await this.refreshUiState();
+    const message = '已复制 Agent 提示词。把它粘贴到你的 agent 工具里，让它安装、启动并连接 Taproot backend。';
+    this.post({ type: 'toast', message });
+    if (announce) {
+      vscode.window.showInformationMessage(message);
     }
   }
 
@@ -423,6 +378,12 @@ class TaprootDashboard {
         case 'copySsh':
           await this.copySsh(requiredState(message), message.nodeName);
           break;
+        case 'approvalAction':
+          await this.handleApprovalAction(message);
+          break;
+        case 'copyAgentPrompt':
+          await this.copyAgentPrompt({ announce: false });
+          break;
         default:
           this.post({ type: 'error', message: `Unknown message: ${message.type}` });
       }
@@ -438,36 +399,30 @@ class TaprootDashboard {
       const text = await fs.readFile(configPath, 'utf8');
       const state = {
         ...parseNodesYaml(text, configPath, backend),
+        server: this.localServerState(),
         activities: await this.loadHistory(configPath),
+        approvals: await loadPendingApprovals(configPath),
       };
       this.lastState = state;
       return state;
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') {
-        const state = emptyState(configPath, backend);
-        await this.createInitialConfig(state);
+        const state = {
+          ...emptyState(configPath, backend),
+          server: this.localServerState(),
+        };
         this.lastState = state;
         return state;
       } else {
         vscode.window.showWarningMessage(`Taproot config load failed: ${formatError(error)}`);
       }
-      const state = emptyState(configPath, backend);
+      const state = {
+        ...emptyState(configPath, backend),
+        server: this.localServerState(),
+      };
       this.lastState = state;
       return state;
-    }
-  }
-
-  private async createInitialConfig(state: DashboardState): Promise<void> {
-    try {
-      await fs.mkdir(path.dirname(state.configPath), { recursive: true });
-      await fs.writeFile(state.configPath, serializeNodesYaml(state), { encoding: 'utf8', flag: 'wx' });
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code === 'EEXIST') {
-        return;
-      }
-      vscode.window.showWarningMessage(`Taproot config create failed: ${formatError(error)}`);
     }
   }
 
@@ -496,6 +451,23 @@ class TaprootDashboard {
     }
   }
 
+  private async handleApprovalAction(message: WebviewMessage): Promise<void> {
+    if (!message.approvalId || !message.approvalDecision) {
+      throw new Error('approvalAction requires approvalId and approvalDecision');
+    }
+    const configPath = this.resolveConfigPath();
+    const updated = await updateApprovalDecision(configPath, message.approvalId, message.approvalDecision);
+    const labels: Record<ApprovalDecision, string> = {
+      approve: '已允许一次',
+      remember: '已允许并记住本次选择',
+      reject: '已拒绝',
+    };
+    const state = await this.loadState();
+    await this.postState(state);
+    this.post({ type: 'toast', message: `${labels[message.approvalDecision]}: ${updated.id}` });
+    this.stateEmitter.fire();
+  }
+
   private async saveConfig(rawState: DashboardState): Promise<void> {
     const state = stateForSerialization(rawState);
     const validation = validateState(state);
@@ -506,8 +478,9 @@ class TaprootDashboard {
 
     await fs.mkdir(path.dirname(state.configPath), { recursive: true });
     await fs.writeFile(state.configPath, serializeNodesYaml(state), 'utf8');
-    this.lastState = state;
-    this.post({ type: 'saved', state, message: `已保存 ${state.configPath}` });
+    const saved = { ...state, server: this.localServerState() };
+    this.lastState = saved;
+    this.post({ type: 'saved', state: saved, message: `已保存 ${state.configPath}` });
     this.stateEmitter.fire();
   }
 
@@ -563,6 +536,7 @@ class TaprootDashboard {
       });
       const checked = {
         ...state,
+        server: this.localServerState(),
         nodes,
         backend: await this.checkBackend(),
         activities: await this.loadHistory(state.configPath),
@@ -702,100 +676,24 @@ class TaprootDashboard {
     if (configured) {
       return path.resolve(expandHome(configured));
     }
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    return defaultConfigPath(root);
+    return defaultConfigPath();
+  }
+
+  private localServerState(): DashboardState['server'] {
+    return {
+      running: Boolean(this.serverProcess),
+      url: this.serverUrl(),
+    };
+  }
+
+  private async refreshUiState(): Promise<void> {
+    const state = await this.loadState();
+    await this.postState(state);
+    this.stateEmitter.fire();
   }
 
   private taprootCommand(): string {
     return vscode.workspace.getConfiguration('taproot').get<string>('taprootMcpCommand')?.trim() || 'taproot-mcp';
-  }
-
-  private pythonCommand(): string {
-    return vscode.workspace.getConfiguration('taproot').get<string>('pythonCommand')?.trim() || '';
-  }
-
-  private async backendInstallSource(): Promise<string> {
-    const wheelPath = vscode.Uri.joinPath(this.context.extensionUri, 'backend', BUNDLED_BACKEND_WHEEL).fsPath;
-    try {
-      await fs.access(wheelPath);
-      return wheelPath;
-    } catch {
-      return 'taproot-mcp';
-    }
-  }
-
-  private async ensureManagedVenv(installSource: string): Promise<CommandSpec> {
-    const venvDir = managedVenvDir();
-    const venvPython = managedVenvPython(venvDir);
-    try {
-      await fs.access(venvPython);
-      return await resolvePythonCommand(venvPython, installSource, runProcess, { requirePip: true });
-    } catch {
-      await fs.rm(venvDir, { recursive: true, force: true });
-    }
-
-    const basePython = await resolvePythonCommand('', installSource, runProcess);
-    await fs.mkdir(path.dirname(venvDir), { recursive: true });
-    try {
-      await runProcess(basePython.command, [...basePython.args, '-m', 'venv', venvDir], 120_000);
-    } catch (error) {
-      throw new Error(`Failed to create managed venv at ${venvDir}: ${summarizeProcessError(error)}`);
-    }
-
-    try {
-      return await resolvePythonCommand(venvPython, installSource, runProcess, { requirePip: true });
-    } catch (error) {
-      throw new Error(`Managed venv is not usable at ${venvDir}: ${summarizeProcessError(error)}`);
-    }
-  }
-
-  private async confirmUserInstall(python: CommandSpec): Promise<boolean> {
-    const choice = await vscode.window.showWarningMessage(
-      [
-        `Selected Python is not a virtual environment: ${python.command}.`,
-        'Install taproot-mcp into the user site with --user?',
-        'Recommended: use a Python 3.10+ virtual environment, or clear taproot.pythonCommand to use the managed venv.',
-      ].join(' '),
-      { modal: true },
-      'Install with --user',
-    );
-    return choice === 'Install with --user';
-  }
-
-  private async configurePythonCommand(commandPath: string): Promise<void> {
-    try {
-      await fs.access(commandPath);
-    } catch {
-      return;
-    }
-    const configuration = vscode.workspace.getConfiguration('taproot');
-    const configured = configuration.get<string>('pythonCommand')?.trim();
-    if (configured) {
-      return;
-    }
-    const inspected = configuration.inspect<string>('pythonCommand');
-    const target = inspected?.workspaceValue !== undefined || inspected?.workspaceFolderValue !== undefined
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
-    await configuration.update('pythonCommand', commandPath, target);
-  }
-
-  private async configureTaprootCommand(commandPath: string): Promise<void> {
-    try {
-      await fs.access(commandPath);
-    } catch {
-      return;
-    }
-    const configuration = vscode.workspace.getConfiguration('taproot');
-    const configured = configuration.get<string>('taprootMcpCommand')?.trim();
-    if (configured && configured !== 'taproot-mcp') {
-      return;
-    }
-    const inspected = configuration.inspect<string>('taprootMcpCommand');
-    const target = inspected?.workspaceValue !== undefined || inspected?.workspaceFolderValue !== undefined
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
-    await configuration.update('taprootMcpCommand', commandPath, target);
   }
 
   private httpHost(): string {
@@ -979,41 +877,6 @@ function runProcess(command: string, args: string[], timeoutMs: number): Promise
   });
 }
 
-async function resolveInstalledTaprootCommand(python: CommandSpec): Promise<string> {
-  const code = [
-    'import os, shutil, site, sysconfig',
-    'name = "taproot-mcp.exe" if os.name == "nt" else "taproot-mcp"',
-    'candidates = []',
-    'found = shutil.which(name)',
-    'candidates.append(found)',
-    'schemes = [sysconfig.get_default_scheme(), f"{os.name}_user"]',
-    'for scheme in schemes:',
-    '    try:',
-    '        candidates.append(os.path.join(sysconfig.get_path("scripts", scheme=scheme) or "", name))',
-    '    except Exception:',
-    '        pass',
-    'try:',
-    '    candidates.append(os.path.join(site.getuserbase(), "Scripts" if os.name == "nt" else "bin", name))',
-    'except Exception:',
-    '    pass',
-    'for candidate in candidates:',
-    '    if candidate and os.path.exists(candidate):',
-    '        print(os.path.abspath(candidate))',
-    '        break',
-  ].join('\n');
-  try {
-    const output = await runProcess(python.command, [...python.args, '-c', code], 10_000);
-    const candidate = output.stdout.trim().split(/\r?\n/).pop() || '';
-    if (!candidate) {
-      return '';
-    }
-    await fs.access(candidate);
-    return candidate;
-  } catch {
-    return '';
-  }
-}
-
 function parseCheckOutput(output: string): Map<string, { ok: boolean; error?: string }> {
   const statuses = new Map<string, { ok: boolean; error?: string }>();
   for (const line of output.split(/\r?\n/)) {
@@ -1120,7 +983,7 @@ function formatBackendUnavailable(command: string, error: unknown): string {
   if (isMissingCommandError(command, error)) {
     return [
       `taproot-mcp 不可用: 找不到命令 "${command}"。`,
-      '请点击 Install/Update Backend 安装后端，',
+      '请复制 Agent 提示词，让 Agent 在扩展运行的同一环境安装/更新后端，',
       '或在扩展运行的同一环境安装 taproot-mcp。',
       'Remote-SSH 场景下应安装在 SSH 远端。',
     ].join('');

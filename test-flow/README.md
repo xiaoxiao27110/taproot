@@ -14,7 +14,7 @@
    - `test_local_tmux_v02.py`: 使用 localhost + tmux 验证 open/exec/read/interrupt/close/list，重点验证 `cd/export` 状态保留和 sentinel exit code。
 4. Codex MCP 手动烟测
    - `codex/config-snippet.toml`: Codex MCP 配置示例。
-   - `scripts/codex_smoke.md`: 在 Codex 中调用 taproot 工具的手动验收步骤。
+   - `scripts/codex_smoke.md`: 连接到 VS Code 插件启动的 Taproot HTTP server 后，在 Codex 中调用工具的手动验收步骤。
 
 ## 快速运行
 
@@ -77,8 +77,10 @@ python -m pip install -e .
 taproot-mcp check --config /tmp/taproot-nodes.localhost.yaml
 ```
 
-2. 按 `test-flow/codex/config-snippet.toml` 把 taproot 注册到 `~/.codex/config.toml`。
-3. 在新的 Codex 会话里按 `test-flow/scripts/codex_smoke.md` 调用工具并记录结果。
+2. 在同一台机器的 VS Code 插件中加载相同的 `nodes.yaml`，点击 **Start Local MCP Server**。
+   - 如果是 Remote-SSH，Codex 连接的是该 SSH host 上的 `127.0.0.1:8765`。
+3. 按 `test-flow/codex/config-snippet.toml` 把该 HTTP endpoint 注册到 `~/.codex/config.toml`。
+4. 在新的 Codex 会话里按 `test-flow/scripts/codex_smoke.md` 调用工具并记录结果。
 
 ## 验收判定
 

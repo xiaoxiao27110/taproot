@@ -31,6 +31,11 @@ export interface BackendStatus {
   message: string;
 }
 
+export interface ServerStatus {
+  running: boolean;
+  url: string;
+}
+
 export interface ActivityItem {
   id: string;
   timestamp: string;
@@ -43,12 +48,26 @@ export interface ActivityItem {
   error?: string;
 }
 
+export type ApprovalDecision = 'approve' | 'remember' | 'reject';
+
+export interface ApprovalItem {
+  id: string;
+  status: string;
+  tool: string;
+  target: string;
+  details: Record<string, unknown>;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface DashboardState {
   configPath: string;
   defaults: UiDefaults;
   nodes: UiNode[];
   backend: BackendStatus;
+  server?: ServerStatus;
   activities: ActivityItem[];
+  approvals: ApprovalItem[];
 }
 
 export interface ValidationResult {
@@ -77,10 +96,7 @@ export function expandHome(filePath: string): string {
   return filePath;
 }
 
-export function defaultConfigPath(workspaceRoot?: string): string {
-  if (workspaceRoot) {
-    return path.join(workspaceRoot, 'nodes.yaml');
-  }
+export function defaultConfigPath(): string {
   return path.join(os.homedir(), '.config', 'taproot', 'nodes.yaml');
 }
 
@@ -113,7 +129,7 @@ export function parseNodesYaml(text: string, configPath: string, backend: Backen
     };
   });
 
-  return { configPath, defaults, nodes, backend, activities: [] };
+  return { configPath, defaults, nodes, backend, activities: [], approvals: [] };
 }
 
 export function emptyState(configPath: string, backend: BackendStatus): DashboardState {
@@ -123,6 +139,7 @@ export function emptyState(configPath: string, backend: BackendStatus): Dashboar
     nodes: [],
     backend,
     activities: [],
+    approvals: [],
   };
 }
 
@@ -223,7 +240,9 @@ export function stateForSerialization(state: DashboardState): DashboardState {
       extra: node.extra ?? {},
     })),
     backend: state.backend,
+    server: state.server,
     activities: state.activities ?? [],
+    approvals: state.approvals ?? [],
   };
 }
 

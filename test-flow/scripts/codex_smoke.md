@@ -1,5 +1,7 @@
 # Codex MCP Smoke Test
 
+前置条件：Codex 已连接到 VS Code 插件启动的 Taproot HTTP server（默认 `http://127.0.0.1:8765/mcp`）。
+
 在新的 Codex 会话中确认 taproot 工具可见，并依次执行以下请求。
 
 1. 查看所有本地测试节点：

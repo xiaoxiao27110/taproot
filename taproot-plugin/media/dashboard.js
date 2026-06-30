@@ -206,18 +206,6 @@
       showToast(message.message || '已保存 nodes.yaml');
       return;
     }
-    if (message.type === 'backendInstalled') {
-      if (state) {
-        state.installingBackend = false;
-      }
-      applyBackendState(message.state, true, { preserveScroll: true });
-      if (state) {
-        state.installingBackend = false;
-        persist();
-      }
-      showToast(message.message || '后端已安装/更新');
-      return;
-    }
     if (message.type === 'testResults') {
       mergeTestResults(message.state);
       showToast(message.message || '连接测试完成');
@@ -232,10 +220,6 @@
       return;
     }
     if (message.type === 'error') {
-      if (state) {
-        state.installingBackend = false;
-        persist();
-      }
       showToast(message.message || '操作失败', 'error');
       return;
     }
@@ -263,7 +247,9 @@
       return checked ? { ...node, status: checked.status, error: checked.error || '' } : node;
     });
     state.backend = incoming.backend;
+    state.server = incoming.server;
     state.activities = incoming.activities;
+    state.approvals = incoming.approvals;
     persist();
     render({ preserveScroll: true });
   }
@@ -273,6 +259,8 @@
       applyBackendState(next, true, { preserveScroll: true });
       return;
     }
+    const hasActivities = !!next && Object.prototype.hasOwnProperty.call(next, 'activities');
+    const hasApprovals = !!next && Object.prototype.hasOwnProperty.call(next, 'approvals');
     const incoming = normalizeState(next, pickUi(state));
     const byName = new Map(incoming.nodes.map((node) => [node.name, node]));
     state.nodes = state.nodes.map((node) => {
@@ -280,6 +268,13 @@
       return checked ? { ...node, status: checked.status, error: checked.error || '' } : node;
     });
     state.backend = incoming.backend;
+    state.server = incoming.server;
+    if (hasActivities) {
+      state.activities = incoming.activities;
+    }
+    if (hasApprovals) {
+      state.approvals = incoming.approvals;
+    }
     persist();
     render({ preserveScroll: true });
   }
@@ -307,7 +302,6 @@
       configOpen: current.configOpen,
       pendingNewNodeId: current.pendingNewNodeId,
       dirty: current.dirty,
-      installingBackend: current.installingBackend,
     };
   }
 
@@ -329,6 +323,7 @@
       ? ui.selected
       : (nodes[0] && nodes[0].name) || '';
     const activities = normalizeActivities(next && next.activities);
+    const approvals = normalizeApprovals(next && next.approvals);
     const sourceOpen = ui.detailOpen && typeof ui.detailOpen === 'object' ? ui.detailOpen : {};
     const detailOpen = {};
     for (const node of nodes) {
@@ -371,6 +366,13 @@
       },
       nodes,
       backend: next && next.backend ? next.backend : { connected: false, message: 'taproot-mcp 状态未知' },
+      server: next && next.server ? {
+        running: !!next.server.running,
+        url: String(next.server.url || ''),
+      } : {
+        running: false,
+        url: 'http://127.0.0.1:8765/mcp',
+      },
       statusStyle: ui.statusStyle || 'dot',
       view: ui.view === 'config' ? 'config' : 'detail',
       selected,
@@ -386,10 +388,10 @@
       configOpen,
       pendingNewNodeId: nodes.some((node) => node.id === pendingNewNodeId) ? pendingNewNodeId : 0,
       activities,
+      approvals,
       toast: null,
       toastTone: 'success',
       dirty: !!ui.dirty,
-      installingBackend: !!ui.installingBackend,
     };
   }
 
@@ -420,6 +422,24 @@
       .slice(0, 200);
   }
 
+  function normalizeApprovals(approvals) {
+    if (!Array.isArray(approvals)) {
+      return [];
+    }
+    return approvals
+      .filter((item) => item && item.id && item.status === 'pending')
+      .map((item) => ({
+        id: String(item.id),
+        status: String(item.status || 'pending'),
+        tool: String(item.tool || ''),
+        target: String(item.target || ''),
+        details: item.details && typeof item.details === 'object' ? item.details : {},
+        created_at: String(item.created_at || ''),
+        updated_at: String(item.updated_at || ''),
+      }))
+      .slice(0, 100);
+  }
+
   function handleAction(el) {
     if (!state) {
       return;
@@ -429,6 +449,9 @@
       case 'refreshAll':
       case 'testAll':
         testConnections();
+        break;
+      case 'copyAgentPrompt':
+        vscode.postMessage({ type: 'copyAgentPrompt' });
         break;
       case 'openConfig':
       case 'showConfig':
@@ -470,6 +493,14 @@
 	        }
 	        break;
 	      }
+      case 'approvalAction': {
+        const approvalId = el.getAttribute('data-id') || '';
+        const approvalDecision = el.getAttribute('data-decision') || '';
+        if (approvalId && approvalDecision) {
+          vscode.postMessage({ type: 'approvalAction', approvalId, approvalDecision });
+        }
+        break;
+      }
       case 'expandAllDetailNodes':
         setAllDetailNodesOpen(true);
         break;
@@ -943,7 +974,12 @@
 
   function renderDetail() {
     if (!state.nodes.length) {
-      return `<section class="detail-page"><h1>节点详情</h1><div class="subtitle">请先添加节点。</div></section>`;
+      return `
+        <section class="detail-page">
+          <h1>节点详情</h1>
+          <div class="subtitle">请先添加节点。</div>
+        </section>
+      `;
     }
     const nodes = filteredDetailNodes();
     return `
@@ -978,11 +1014,100 @@
             <span>刷新</span>
           </button>
         </div>
+        ${renderApprovalQueue()}
         <div class="detail-stack" data-detail-stack>
           ${nodes.length ? nodes.map(renderDetailNodePanel).join('') : renderDetailNoResults()}
         </div>
       </section>
     `;
+  }
+
+  function renderApprovalQueue() {
+    const approvals = state.approvals || [];
+    if (!approvals.length) {
+      return '';
+    }
+    return `
+      <section class="approval-panel" aria-label="待审批危险操作">
+        <div class="approval-panel-head">
+          <span class="codicon codicon-shield"></span>
+          <div>
+            <h2>待审批危险操作</h2>
+            <p>这些请求需要你明确批准后才会执行。</p>
+          </div>
+        </div>
+        <div class="approval-list">
+          ${approvals.map(renderApprovalItem).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderApprovalItem(item) {
+    const detail = approvalDetail(item);
+    return `
+      <article class="approval-item" data-approval-id="${escAttr(item.id)}">
+        <div class="approval-main">
+          <div class="approval-title">
+            <span class="approval-kind">${esc(approvalKindLabel(item))}</span>
+            <strong>${esc(approvalSubject(item))}</strong>
+          </div>
+          <div class="approval-meta">
+            <span>ID ${esc(item.id)}</span>
+            <span>目标 ${esc(item.target || '-')}</span>
+            ${item.created_at ? `<span>${esc(formatActivityTime(item.created_at))}</span>` : ''}
+          </div>
+          ${detail ? `<div class="approval-detail">${esc(detail)}</div>` : ''}
+        </div>
+        <div class="approval-actions">
+          <button class="button secondary compact" data-action="approvalAction" data-decision="reject" data-id="${escAttr(item.id)}">
+            <span class="codicon codicon-close"></span><span>拒绝</span>
+          </button>
+          <button class="button secondary compact" data-action="approvalAction" data-decision="approve" data-id="${escAttr(item.id)}">
+            <span class="codicon codicon-check"></span><span>允许一次</span>
+          </button>
+          <button class="button primary compact" data-action="approvalAction" data-decision="remember" data-id="${escAttr(item.id)}">
+            <span class="codicon codicon-save"></span><span>允许并记住</span>
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  function approvalKindLabel(item) {
+    return activityKindLabel({ tool: item.tool, action: 'operation' }) || '危险操作';
+  }
+
+  function approvalSubject(item) {
+    const detail = item.details || {};
+    const subject = activitySubjectFromDetail({ tool: item.tool }, detail) || item.tool || '待审批请求';
+    return truncateActivitySubject(subject);
+  }
+
+  function approvalDetail(item) {
+    const detail = item.details || {};
+    const parts = [];
+    for (const key of ['access', 'path', 'resolved_path', 'cwd', 'service', 'action', 'sudo', 'content_sha256', 'old_str_sha256', 'new_str_sha256']) {
+      if (detail[key] !== undefined && detail[key] !== null && detail[key] !== '') {
+        parts.push(`${approvalDetailLabel(key)}: ${detail[key]}`);
+      }
+    }
+    return parts.join(' · ');
+  }
+
+  function approvalDetailLabel(key) {
+    return {
+      access: '访问',
+      path: '路径',
+      resolved_path: '解析路径',
+      cwd: '工作目录',
+      service: '服务',
+      action: '动作',
+      sudo: 'sudo',
+      content_sha256: '内容指纹',
+      old_str_sha256: '旧内容指纹',
+      new_str_sha256: '新内容指纹',
+    }[key] || key;
   }
 
   function renderDetailFilterMenu() {
@@ -1092,15 +1217,19 @@
 
   function renderActivityItem(item) {
     const meta = activityMeta(item.action);
-    const detail = activityDetail(item);
     const open = !!state.activityOpen[item.id];
+    const label = activityTitleLabel(item);
+    const subject = open ? '' : activitySubject(item);
     return `
       <article class="activity-item ${item.ok ? '' : 'failed'} ${open ? 'open' : ''}" data-activity-id="${escAttr(item.id)}">
         <button class="activity-summary" data-action="toggleActivity" data-id="${escAttr(item.id)}">
           <span class="codicon ${meta.icon} activity-icon ${meta.tone}"></span>
           <span class="activity-copy">
-            <span class="activity-title"><span class="activity-title-label">${esc(activityTitle(item))}</span>${item.ok ? '' : '<span class="activity-fail">失败</span>'}</span>
-            ${detail ? `<span class="activity-detail">${esc(detail)}</span>` : ''}
+            <span class="activity-title">
+              <span class="activity-title-label">${esc(label)}</span>
+              ${subject ? `<span class="activity-title-text">${esc(subject)}</span>` : ''}
+              ${item.ok ? '' : '<span class="activity-fail">失败</span>'}
+            </span>
           </span>
           <time class="activity-time">${esc(formatActivityTime(item.timestamp))}</time>
           <span class="codicon ${open ? 'codicon-chevron-down' : 'codicon-chevron-right'} activity-chevron"></span>
@@ -1110,12 +1239,50 @@
     `;
   }
 
-  function activityTitle(item) {
+  function activityTitleLabel(item) {
     const summary = (item.summary || '').trim();
     if (summary && !isBackendToolName(summary)) {
-      return summary.replace(/\bcluster_[a-z0-9_]+\b/ig, activityKindLabel(item) || '操作');
+      const prefix = summary.match(/^([^:：]{1,14})[:：]\s*/);
+      if (prefix) {
+        return prefix[1].trim();
+      }
     }
     return activityKindLabel(item) || '操作';
+  }
+
+  function activitySubject(item) {
+    const detail = item.detail || {};
+    const summary = (item.summary || '').trim();
+    const summarySuffix = summary.match(/^[^:：]{1,14}[:：]\s*(.+)$/);
+    const subject = activitySubjectFromDetail(item, detail) || (summarySuffix ? summarySuffix[1] : '');
+    return truncateActivitySubject(subject);
+  }
+
+  function activitySubjectFromDetail(item, detail) {
+    if (detail.command) {
+      return String(detail.command);
+    }
+    if (item.tool === 'cluster_upload' && (detail.local_path || detail.remote_path)) {
+      return [detail.local_path, detail.remote_path].filter(Boolean).join(' -> ');
+    }
+    if (item.tool === 'cluster_download' && (detail.remote_path || detail.local_path)) {
+      return [detail.remote_path, detail.local_path].filter(Boolean).join(' -> ');
+    }
+    for (const key of ['path', 'remote_path', 'local_path', 'pattern', 'service', 'backup_path']) {
+      if (detail[key]) {
+        return String(detail[key]);
+      }
+    }
+    return '';
+  }
+
+  function truncateActivitySubject(value) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    const max = 96;
+    if (text.length <= max) {
+      return text;
+    }
+    return `${text.slice(0, max - 1)}…`;
   }
 
   function activityKindLabel(item) {
@@ -1439,6 +1606,9 @@
         extra: node.extra || {},
       })),
       backend: state.backend,
+      server: state.server,
+      activities: state.activities || [],
+      approvals: state.approvals || [],
     };
   }
 
@@ -1495,6 +1665,10 @@
       setTimeout(() => receive({ type: 'toast', message: message.type === 'copySsh' ? '已复制 SSH 命令' : '终端执行 SSH 命令' }), 40);
       return;
     }
+    if (message.type === 'copyAgentPrompt') {
+      setTimeout(() => receive({ type: 'toast', message: '已复制 Agent 提示词。把它粘贴到你的 agent 工具里，让它安装、启动并连接 Taproot backend。' }), 40);
+      return;
+    }
   }
 
   function mockState() {
@@ -1502,6 +1676,7 @@
       configPath: '/tmp/taproot-nodes.localhost.yaml',
       defaults: { user: 'admin', port: '22', pwd: '', sudo: '', extra: { key: '~/.ssh/id_rsa' } },
       backend: { connected: true, message: 'taproot-mcp 已连接' },
+      server: { running: true, url: 'http://127.0.0.1:8765/mcp' },
       nodes: [
         { id: 1, name: 'gpu-node-1', host: '192.168.1.101', user: '', port: '', pwd: '', sudo: '', tags: ['gpu', 'h200', 'vllm'], status: 'online', extra: {} },
         { id: 2, name: 'gpu-node-2', host: '192.168.1.102', user: '', port: '', pwd: '', sudo: '', tags: ['gpu', 'h200', 'vllm'], status: 'online', extra: {} },
@@ -1538,6 +1713,20 @@
           ok: true,
           summary: '执行 bash: nvidia-smi -L',
           detail: { command: 'nvidia-smi -L' },
+        },
+      ],
+      approvals: [
+        {
+          id: 'appr-build-1',
+          status: 'pending',
+          tool: 'cluster_exec',
+          target: 'gpu-node-1',
+          details: {
+            command: 'set -eux cat > /tmp/build/run-build.sh <<SCRIPT && bash /tmp/build/run-build.sh',
+            cwd: '/tmp/build',
+            sudo: false,
+          },
+          created_at: '2026-06-20T01:20:00.000Z',
         },
       ],
     };

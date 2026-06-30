@@ -2,7 +2,7 @@
   "name": "taproot-mcp",
   "displayName": "taproot-mcp",
   "description": "Fleet-level MCP dashboard for SSH clusters: edit nodes.yaml and check taproot-mcp connectivity.",
-  "version": "0.1.47",
+  "version": "0.1.48",
   "publisher": "xiaoxiao27110",
   "license": "SEE LICENSE IN LICENSE",
   "preview": true,
@@ -42,11 +42,11 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Taproot reads and writes workspace nodes.yaml files and runs the workspace taproot-mcp command."
+      "description": "Taproot reads and writes its nodes.yaml file and runs taproot-mcp commands."
     },
     "virtualWorkspaces": {
       "supported": false,
-      "description": "Taproot requires workspace filesystem and process access for nodes.yaml and taproot-mcp."
+      "description": "Taproot requires filesystem and process access for nodes.yaml and taproot-mcp."
     }
   },
   "activationEvents": [
@@ -55,7 +55,7 @@
     "onCommand:taproot.openConfig",
     "onCommand:taproot.testConnections",
     "onCommand:taproot.refreshNodes",
-    "onCommand:taproot.installBackend",
+    "onCommand:taproot.copyAgentPrompt",
     "onCommand:taproot.startServer",
     "onCommand:taproot.stopServer",
     "onCommand:taproot.openNodeTerminal",
@@ -87,10 +87,10 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "taproot.installBackend",
-        "title": "Install/Update Backend",
+        "command": "taproot.copyAgentPrompt",
+        "title": "Copy Agent Prompt",
         "category": "taproot-mcp",
-        "icon": "$(cloud-download)"
+        "icon": "$(copy)"
       },
       {
         "command": "taproot.startServer",
@@ -149,17 +149,12 @@
         "taproot.configPath": {
           "type": "string",
           "default": "",
-          "description": "Path to nodes.yaml. Empty uses workspace nodes.yaml, then ~/.config/taproot/nodes.yaml."
+          "description": "Path to nodes.yaml. Empty uses ~/.config/taproot/nodes.yaml."
         },
         "taproot.taprootMcpCommand": {
           "type": "string",
           "default": "taproot-mcp",
           "description": "Command used to run taproot-mcp for validation, connection checks, and local server startup."
-        },
-        "taproot.pythonCommand": {
-          "type": "string",
-          "default": "",
-          "description": "Python command used when installing or updating the taproot-mcp backend. Empty creates or reuses the managed Taproot venv."
         },
         "taproot.statusPollIntervalSeconds": {
           "type": "number",
@@ -196,7 +191,7 @@
           "command": "taproot.refreshNodes"
         },
         {
-          "command": "taproot.installBackend"
+          "command": "taproot.copyAgentPrompt"
         },
         {
           "command": "taproot.startServer"
@@ -207,24 +202,29 @@
       ],
       "view/title": [
         {
+          "command": "taproot.copyAgentPrompt",
+          "when": "view == taproot.nodes",
+          "group": "navigation@1"
+        },
+        {
           "command": "taproot.startServer",
           "when": "view == taproot.nodes && !taproot.serverRunning",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "taproot.stopServer",
           "when": "view == taproot.nodes && taproot.serverRunning",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "taproot.openConfig",
           "when": "view == taproot.nodes",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "taproot.refreshNodes",
           "when": "view == taproot.nodes",
-          "group": "navigation@3"
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [

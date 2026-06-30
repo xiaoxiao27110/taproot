@@ -1,6 +1,6 @@
 import * as cp from 'node:child_process';
 
-import { summarizeProcessError } from './backendInstall';
+import { summarizeProcessError } from './processError';
 
 export async function waitForHttpServerReady(
   url: string,

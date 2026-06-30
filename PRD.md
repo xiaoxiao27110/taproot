@@ -13,14 +13,22 @@
 
 ### 部署模型
 
- **taproot-mcp 运行在你的本地机器上** (即运行 Codex / Claude Code 的那台电脑),通过 stdio 与本地 agent 的 MCP client 连接。它不是一个部署在远端服务器上的中心化服务——它就是你笔记本/工作站上的一个本地进程。
+ **taproot-mcp 运行在你的本地机器上** (即运行 VS Code 插件 / Codex / Claude Code 的那台电脑)。当前产品约定里，Codex 连接的是 VS Code 插件启动的 Streamable HTTP server；Claude Code 或其他命令式客户端仍可直接用 stdio。它不是一个部署在远端服务器上的中心化服务——它就是你笔记本/工作站上的一个本地进程。
 
 ```
 ┌─ 你的本地机器 ──────────────────────────────┐
 │                                              │
-│  Codex / Claude Code (agent)                 │
-│       ↕ stdio(MCP 协议)                     │
-│  taproot-mcp (本地进程)                      │
+│  Codex                                      │
+│       ↕ HTTP(MCP 协议)                      │
+│  VS Code Taproot 插件启动的 taproot-mcp      │
+│       ↕ SSH(asyncssh 连接池)                │
+│       ├──→ 远端节点 A                        │
+│       ├──→ 远端节点 B                        │
+│       └──→ 远端节点 C                        │
+│                                              │
+│  Claude Code / 其他客户端                    │
+│       ↕ stdio 或 HTTP(MCP 协议)              │
+│  taproot-mcp (同机本地进程)                  │
 │       ↕ SSH(asyncssh 连接池)                │
 │       ├──→ 远端节点 A                        │
 │       ├──→ 远端节点 B                        │
@@ -455,12 +463,12 @@ target 匹配多个节点时,各节点文件分别存到 local_path 下以节点
 
 ## 9. 传输层( **main** .py)
 
-taproot-mcp 作为本地进程运行, **主路径是 stdio** ——agent(Codex / Claude Code)以子进程方式拉起它,通过 stdin/stdout 交换 MCP 消息。这是最简单、零网络配置的模式,也是绝大多数用户的唯一用法。
+taproot-mcp 作为本地进程运行。当前产品路径里， **Codex 主路径是连接 VS Code 插件启动的 Streamable HTTP server** ；stdio 仍保留给 Claude Code、调试和其他按命令拉起 server 的客户端。
 
 支持两种 transport,通过命令行参数选择:
 
-* **stdio** (默认,主路径):本地子进程,兼容 Codex CLI 和 Claude Code 的本地 MCP 配置。agent 启动 taproot-mcp 进程后直接通信,无需监听端口。
-* **Streamable HTTP** (`--transport http --host 0.0.0.0 --port 8765`):备用,供特殊场景(如 VS Code 扩展或其他非 stdio 客户端连接同一个本地实例)。仍然是本地运行,只是换了通信通道。
+* **Streamable HTTP** (`--transport http --host 127.0.0.1 --port 8765`):Codex 主路径。由 VS Code 扩展启动并管理,或手动启动用于调试。Codex 连接这个 URL,不再单独拉起一个 taproot-mcp 子进程。
+* **stdio** :保留给 Claude Code、本地调试和其他按命令拉起 server 的客户端。仍然是本地子进程直连,无需监听端口。
 
 另外提供一个  **`check` 子命令** :`taproot-mcp check` —— 加载配置、尝试连接所有节点、打印每个节点的连通状态(成功/失败原因),用于在接入 agent 之前验证配置。这个命令对调试很重要,请务必实现。
 
@@ -513,7 +521,7 @@ v0.1 = 10 个工具(镜像 Claude Code 本地体验的 exec/read/edit/write/list
 
 * 可安装运行的包:`pip install -e .` 后存在 `taproot-mcp` 命令入口。
 * `nodes.yaml.example` 模板。
-* `README.md`,包含:安装步骤、配置说明、`check` 子命令用法、以及如何在  **Codex** (`~/.codex/config.toml`)和  **Claude Code** (`claude mcp add`)中注册本 server 的示例。
+* `README.md`,包含:安装步骤、配置说明、`check` 子命令用法、以及如何让 **Codex** 连接 VS Code 插件启动的 HTTP server、以及让 **Claude Code** 注册本 server 的示例。
 
 **验收场景(请据此自查):**
 

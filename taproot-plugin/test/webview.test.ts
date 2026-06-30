@@ -31,6 +31,15 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.match(css, /\.detail-filter-menu\b/);
   assert.match(css, /\.detail-bulk-actions\b/);
   assert.match(css, /\.detail-bulk-button\b/);
+  assert.match(css, /\.activity-summary\s*\{[\s\S]*?min-height:\s*52px/);
+  assert.match(css, /\.activity-title-text\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
+  assert.doesNotMatch(css, /\.activity-detail\b/);
+  assert.match(css, /\.approval-panel\b/);
+  assert.match(css, /\.approval-item\b/);
+  assert.match(css, /\.approval-actions\b/);
+  assert.doesNotMatch(css, /\.agent-setup\b/);
+  assert.doesNotMatch(css, /\.agent-setup-actions\b/);
+  assert.doesNotMatch(css, /\.agent-setup-row code\b/);
   assert.match(css, /\.tabs-indicator\b/);
   assert.match(css, /@keyframes tab-indicator-slide/);
   assert.match(css, /\.content\.view-transition\b/);
@@ -49,7 +58,13 @@ test('dashboard webview renders as a real extension surface and supports core in
   dom.window.HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
     scrolledCards.push(this.dataset.nodeCardId || '');
   };
-  const postedMessages: Array<{ type?: string; nodeName?: string; state?: any }> = [];
+  const postedMessages: Array<{
+    type?: string;
+    nodeName?: string;
+    state?: any;
+    approvalId?: string;
+    approvalDecision?: string;
+  }> = [];
   const originalLog = dom.window.console.log.bind(dom.window.console);
   dom.window.console.log = (...args: unknown[]) => {
     if (args[0] === '[taproot mock postMessage]' && args[1] && typeof args[1] === 'object') {
@@ -71,6 +86,21 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.equal(dom.window.document.querySelector('.node-preview'), null);
   assert.equal(dom.window.document.querySelectorAll('[data-detail-node]').length, 4);
   assert.equal(dom.window.document.querySelectorAll('[data-node-row]').length, 4);
+  assert.match(dom.window.document.body.textContent || '', /待审批危险操作/);
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /安装后端，然后复制提示词给你的 Agent/);
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /复制 Agent 提示词/);
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /安装\/更新后端/);
+  assert.match(dom.window.document.body.textContent || '', /允许一次/);
+  assert.match(dom.window.document.body.textContent || '', /允许并记住/);
+  assert.match(dom.window.document.body.textContent || '', /拒绝/);
+  assert(dom.window.document.querySelector('[data-approval-id="appr-build-1"]'));
+  const approvalMessagesBefore = postedMessages.filter((item) => item.type === 'approvalAction').length;
+  click(dom, '[data-approval-id="appr-build-1"] [data-decision="remember"]');
+  const approvalMessages = postedMessages.filter((item) => item.type === 'approvalAction');
+  assert.equal(approvalMessages.length, approvalMessagesBefore + 1);
+  const approvalMessage = approvalMessages.at(-1);
+  assert.equal(approvalMessage?.approvalId, 'appr-build-1');
+  assert.equal(approvalMessage?.approvalDecision, 'remember');
   assert.equal(dom.window.document.querySelector('.titlebar'), null);
   assert.equal(dom.window.document.querySelector('.activitybar'), null);
   assert.equal(dom.window.document.querySelector('.sidebar'), null);
@@ -88,14 +118,17 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.equal(headerActions.querySelector('[data-action="testAll"]'), null);
   assert.equal(headerActions.querySelector('[data-action="showConfig"]'), null);
   assert.equal(headerActions.querySelector('[data-action="installBackend"]'), null);
+  assert.equal(dom.window.document.querySelector('[data-action="copyAgentPrompt"]'), null);
   const workbench = dom.window.document.querySelector('.taproot-workbench');
   assert(workbench);
   assert.equal(workbench.hasAttribute('data-theme'), false);
   dispatchMouseOver(dom, '[data-node-row="gpu-node-1"]');
   assert.equal(dom.window.document.querySelector('.tooltip'), null);
-  const detailSearch = dom.window.document.querySelector<HTMLInputElement>('input[data-bind="detailSearch"]');
+  let detailSearch = dom.window.document.querySelector<HTMLInputElement>('input[data-bind="detailSearch"]');
   assert(detailSearch);
   assert.equal(detailSearch.placeholder, '按名称/标签搜索');
+  detailSearch = dom.window.document.querySelector<HTMLInputElement>('input[data-bind="detailSearch"]');
+  assert(detailSearch);
   assert(dom.window.document.querySelector('[data-action="toggleFilter"]'));
   assert.match(dom.window.document.querySelector('[data-action="expandAllDetailNodes"]')?.textContent || '', /全部展开/);
   assert.match(dom.window.document.querySelector('[data-action="collapseAllDetailNodes"]')?.textContent || '', /全部折叠/);
@@ -127,7 +160,6 @@ test('dashboard webview renders as a real extension surface and supports core in
       configPath: '/tmp/taproot-nodes.localhost.yaml',
       defaults: { user: 'admin', port: '22', pwd: '', sudo: '', extra: {} },
       backend: { connected: true, message: 'taproot-mcp 已连接' },
-      activities: [],
       nodes: [
         {
           id: 2,
@@ -163,17 +195,28 @@ test('dashboard webview renders as a real extension surface and supports core in
   click(dom, '[data-action="expandAllDetailNodes"]');
   assert.equal(dom.window.document.querySelectorAll('.detail-node.open').length, 4);
   assert.equal((dom.window.document.querySelector<HTMLElement>('.content'))?.scrollTop, 64);
-  assert.match(dom.window.document.body.textContent || '', /执行 bash: nvidia-smi -L/);
+  const execSummary = dom.window.document.querySelector<HTMLElement>('[data-activity-id="mock-exec-1"] .activity-summary');
+  assert(execSummary);
+  assert.match(execSummary.textContent || '', /执行 bash/);
+  assert.match(execSummary.textContent || '', /nvidia-smi -L/);
   assert.equal(dom.window.document.querySelector('.info-grid'), null);
   assert.doesNotMatch(dom.window.document.body.textContent || '', /Host \/ IP/);
-  assert.match(dom.window.document.body.textContent || '', /执行 bash: nvidia-smi -L/);
   assert.doesNotMatch(dom.window.document.body.textContent || '', /cluster_(exec|read_file|write_file)/);
   assert.equal(dom.window.document.querySelector('.activity-kind'), null);
   assert(dom.window.document.querySelector('.activity-title-label'));
+  assert(dom.window.document.querySelector('.activity-title-text'));
+  assert.equal(dom.window.document.querySelector('.activity-detail'), null);
+  click(dom, '[data-activity-id="mock-exec-1"] .activity-summary');
+  const expandedExec = dom.window.document.querySelector<HTMLElement>('[data-activity-id="mock-exec-1"]');
+  assert(expandedExec);
+  assert.doesNotMatch(expandedExec.querySelector<HTMLElement>('.activity-summary')?.textContent || '', /nvidia-smi -L/);
+  assert.match(expandedExec.textContent || '', /命令/);
+  assert.match(expandedExec.textContent || '', /nvidia-smi -L/);
   const gpuActivities = [...dom.window.document.querySelectorAll<HTMLElement>('[data-detail-node="gpu-node-1"] .activity-title')].map((item) => item.textContent || '');
-  assert.match(gpuActivities[0], /写入文件: 1\.txt/);
+  assert.match(gpuActivities[0], /写入文件/);
+  assert.match(gpuActivities[0], /1\.txt/);
   assert.doesNotMatch(gpuActivities[0], /文件写入/);
-  assert(gpuActivities.findIndex((item) => item.includes('写入文件: 1.txt')) < gpuActivities.findIndex((item) => item.includes('读取文件: 1.txt')));
+  assert(gpuActivities.findIndex((item) => item.includes('写入文件') && item.includes('1.txt')) < gpuActivities.findIndex((item) => item.includes('读取文件') && item.includes('1.txt')));
   assert.doesNotMatch(dom.window.document.querySelector('[data-detail-node="gpu-node-1"]')?.textContent || '', /写入内容/);
   click(dom, '[data-activity-id="mock-write-1"] .activity-summary');
   const expandedWrite = dom.window.document.querySelector<HTMLElement>('[data-activity-id="mock-write-1"]');

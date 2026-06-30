@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
   DashboardState,
+  defaultConfigPath,
   emptyState,
   makeSshCommand,
   makeSshpassCommand,
@@ -13,6 +16,10 @@ import {
 } from '../src/configModel';
 
 const backend = { connected: true, message: 'ok' };
+
+test('defaultConfigPath uses the user config location instead of the workspace root', () => {
+  assert.equal(defaultConfigPath(), path.join(os.homedir(), '.config', 'taproot', 'nodes.yaml'));
+});
 
 test('parseNodesYaml maps PRD config into UI state and preserves extra fields', () => {
   const state = parseNodesYaml(
@@ -119,6 +126,7 @@ test('validateState catches duplicate names and missing host', () => {
       { id: 2, name: 'node-a', host: 'localhost', user: '', port: 'bad', pwd: '', sudo: '', tags: [], status: 'inactive', extra: {} },
     ],
     activities: [],
+    approvals: [],
   };
 
   const result = validateState(state);

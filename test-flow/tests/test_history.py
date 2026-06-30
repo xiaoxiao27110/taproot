@@ -39,9 +39,12 @@ async def test_cluster_exec_writes_per_node_history(tmp_path: Path) -> None:
 
     result = await tools.cluster_exec("local-*", "echo ok", sudo=True, sudo_password="secret")
     assert result["summary"] == {"success": 0, "failed": 2, "total": 2}
+    assert result["results"]["local-a"]["approval_required"] is True
+    assert "approval_id" not in result["results"]["local-a"]
     assert pool.calls == 0
-    approval_id = result["results"]["local-a"]["approval_id"]
-    ApprovalStore(config).approve(approval_id)
+    pending = ApprovalStore(config).list(status="pending")
+    assert pending
+    ApprovalStore(config).approve(pending[0]["id"])
 
     result = await tools.cluster_exec("local-*", "echo ok", sudo=True, sudo_password="secret")
     assert result["summary"] == {"success": 2, "failed": 0, "total": 2}

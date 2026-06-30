@@ -32,7 +32,10 @@ async def approved_session_exec(
 ) -> dict:
     pending = await tools.cluster_session_exec(session_id, command, timeout)
     node = next(iter(pending["results"]))
-    ApprovalStore(tools.config).approve(pending["results"][node]["approval_id"])
+    assert pending["results"][node]["approval_required"] is True
+    approvals = ApprovalStore(tools.config).list(status="pending")
+    assert approvals
+    ApprovalStore(tools.config).approve(approvals[0]["id"])
     return await tools.cluster_session_exec(session_id, command, timeout)
 
 

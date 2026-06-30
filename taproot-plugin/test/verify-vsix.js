@@ -21,8 +21,8 @@ const entries = new Set(unzip(['-Z1', vsixPath]).trim().split(/\r?\n/).filter(Bo
 const requiredEntries = [
   'extension/package.json',
   'extension/out/src/extension.js',
-  'extension/out/src/backendInstall.js',
   'extension/out/src/configModel.js',
+  'extension/out/src/processError.js',
   'extension/out/src/serverStartup.js',
   'extension/media/icon.png',
   'extension/media/taproot-icons.woff',
@@ -70,25 +70,36 @@ assert.equal(packagedManifest.license, 'SEE LICENSE IN LICENSE');
 assert.equal(packagedManifest.publisher, 'xiaoxiao27110');
 assert(packagedManifest.activationEvents.includes('onView:taproot.nodes'));
 assert(packagedManifest.activationEvents.includes('onCommand:taproot.refreshNodes'));
-assert(packagedManifest.activationEvents.includes('onCommand:taproot.installBackend'));
+assert(!packagedManifest.activationEvents.includes('onCommand:taproot.installBackend'));
+assert(packagedManifest.activationEvents.includes('onCommand:taproot.copyAgentPrompt'));
 assert.equal(packagedManifest.contributes?.icons?.['taproot-root']?.default?.fontPath, './media/taproot-icons.woff');
 assert(commands.includes('taproot.refreshNodes'));
-assert(commands.includes('taproot.installBackend'));
+assert(!commands.includes('taproot.installBackend'));
+assert(commands.includes('taproot.copyAgentPrompt'));
 assert(commands.includes('taproot.startServer'));
 assert(commands.includes('taproot.stopServer'));
-assert(commandPalette.includes('taproot.installBackend'));
+assert(!commandPalette.includes('taproot.installBackend'));
+assert(commandPalette.includes('taproot.copyAgentPrompt'));
 assert(!viewTitle.includes('taproot.installBackend'));
+assert(viewTitle.includes('taproot.copyAgentPrompt'));
 
 const extensionSource = unzip(['-p', vsixPath, 'extension/out/src/extension.js']);
 assert(extensionSource.includes("registerCommand('taproot.refreshNodes'"));
-assert(extensionSource.includes("registerCommand('taproot.installBackend'"));
+assert(!extensionSource.includes("registerCommand('taproot.installBackend'"));
+assert(extensionSource.includes("registerCommand('taproot.copyAgentPrompt'"));
 assert(!extensionSource.includes("case 'installBackend'"));
-assert(extensionSource.includes('taproot_mcp-0.2.2-py3-none-any.whl'));
+assert(extensionSource.includes("case 'copyAgentPrompt'"));
+assert(extensionSource.includes('https://github.com/xiaoxiao27110/taproot/releases/latest'));
+assert(!extensionSource.includes('BUNDLED_BACKEND_WHEEL'));
 assert(extensionSource.includes("['validate', '--config', configPath]"));
 assert(extensionSource.includes('waitForHttpServerReady'));
-assert(extensionSource.includes('Install with --user'));
+assert(extensionSource.includes('defaultConfigPath)();'));
+assert(!extensionSource.includes('defaultConfigPath)(root);'));
+assert(!extensionSource.includes('createInitialConfig('));
+assert(!extensionSource.includes('Install with --user'));
 assert(extensionSource.includes("registerCommand('taproot.startServer'"));
 assert(extensionSource.includes("registerCommand('taproot.stopServer'"));
+assert(extensionSource.includes('buildAgentPrompt'));
 assert.equal(packagedManifest.name, 'taproot-mcp');
 assert.equal(packagedManifest.displayName, 'taproot-mcp');
 assert.deepEqual(packagedManifest.extensionKind, ['workspace']);
