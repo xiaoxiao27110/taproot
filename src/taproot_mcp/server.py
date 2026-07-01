@@ -8,6 +8,7 @@ import inspect
 import json
 import os
 import posixpath
+import re
 import shlex
 import stat
 import textwrap
@@ -21,7 +22,6 @@ from typing import Any
 import asyncssh
 from mcp.server.fastmcp import FastMCP
 
-from taproot_mcp.approvals import ApprovalStore
 from taproot_mcp.config import ClusterConfig, load_config
 from taproot_mcp.history import append_tool_history
 from taproot_mcp.models import Envelope, error_result, make_envelope, ok_result
@@ -60,6 +60,29 @@ TOOL_NAMES = [
     "cluster_session_close",
     "cluster_session_list",
 ]
+DANGEROUS_COMMAND_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("sudo", re.compile(r"(^|[;&|()\s])sudo(\s|$)", re.IGNORECASE)),
+    ("rm -rf", re.compile(r"\brm\s+-[A-Za-z]*r[A-Za-z]*f[A-Za-z]*\b", re.IGNORECASE)),
+    ("rm -rf", re.compile(r"\brm\s+-[A-Za-z]*f[A-Za-z]*r[A-Za-z]*\b", re.IGNORECASE)),
+    ("dd", re.compile(r"\bdd\s+", re.IGNORECASE)),
+    ("mkfs", re.compile(r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b", re.IGNORECASE)),
+    ("wipefs", re.compile(r"\bwipefs\b", re.IGNORECASE)),
+    ("fdisk", re.compile(r"\bfdisk\b", re.IGNORECASE)),
+    ("parted", re.compile(r"\bparted\b", re.IGNORECASE)),
+    ("permissions", re.compile(r"\b(?:chmod|chown|chgrp|setfacl)\b", re.IGNORECASE)),
+    (
+        "systemctl",
+        re.compile(
+            r"\bsystemctl\s+(?:--[^\s]+\s+)*(?:start|stop|restart|reload|enable|disable)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "service",
+        re.compile(r"\bservice\s+\S+\s+(?:start|stop|restart|reload)\b", re.IGNORECASE),
+    ),
+    ("power", re.compile(r"\b(?:reboot|shutdown|poweroff|halt)\b", re.IGNORECASE)),
+)
 
 
 @dataclass(frozen=True)
@@ -70,6 +93,7 @@ class RemotePath:
     path: str
     home: str
     inside_home: bool
+    risk: dict[str, Any] | None = None
 
 
 class TaprootTools:
@@ -81,7 +105,6 @@ class TaprootTools:
         self.config = config
         self.pool = pool or SSHPool(config)
         self.sessions = SessionManager(config, self.pool)
-        self.approvals = ApprovalStore(config)
         self._home_cache: dict[str, str] = {}
         self._config_digest = _config_digest(config)
         self._config_lock = asyncio.Lock()
@@ -127,9 +150,9 @@ class TaprootTools:
         await self._ensure_config_current()
         node_names = resolve_target(target, self.config.nodes)
         details = {"command": command, "cwd": cwd, "sudo": sudo, "timeout": timeout}
-        approval = self._require_approval("cluster_exec", target, details)
-        if approval is not None:
-            return make_envelope({node: self._approval_required_result(approval) for node in node_names})
+        risk = _cluster_exec_risk(command, sudo)
+        if risk is not None:
+            details["_risk"] = risk
 
         async def op(node: str) -> dict[str, Any]:
             actual = command
@@ -181,7 +204,10 @@ class TaprootTools:
                 return remote
             async with self.pool.sftp(node) as sftp:
                 data = await _read_remote_bytes(sftp, remote.path, max_bytes=MAX_READ_FILE_BYTES)
-            return ok_result(content=data.decode("utf-8", errors="replace"), size=len(data))
+            return _with_risk(
+                ok_result(content=data.decode("utf-8", errors="replace"), size=len(data)),
+                remote.risk,
+            )
 
         return await self._recorded_on_targets(
             "cluster_read_file",
@@ -227,9 +253,12 @@ class TaprootTools:
                 text = original.decode("utf-8", errors="replace")
                 count = text.count(old_str)
                 if count == 0:
-                    return error_result("old_str was not found")
+                    return _with_risk(error_result("old_str was not found"), remote.risk)
                 if count > 1:
-                    return error_result("old_str is not unique; provide more context")
+                    return _with_risk(
+                        error_result("old_str is not unique; provide more context"),
+                        remote.risk,
+                    )
 
                 updated = text.replace(old_str, new_str, 1).encode("utf-8")
                 backup_path = None
@@ -249,11 +278,14 @@ class TaprootTools:
                     )
                     result = await self.pool.run(node, cmd, input_data=input_data, timeout=30)
                     if result.exit_status != 0:
-                        return error_result(_command_detail(result, "failed to write file"))
+                        return _with_risk(
+                            error_result(_command_detail(result, "failed to write file")),
+                            remote.risk,
+                        )
                 else:
                     await _write_remote_bytes(sftp, remote.path, updated)
 
-            return ok_result(changed=True, backup_path=backup_path)
+            return _with_risk(ok_result(changed=True, backup_path=backup_path), remote.risk)
 
         return await self._recorded_on_targets(
             "cluster_edit_file",
@@ -299,7 +331,10 @@ class TaprootTools:
                         data=old_data,
                     )
                 await _write_remote_bytes(sftp, remote.path, data)
-            return ok_result(bytes_written=len(data), backup_path=backup_path)
+            return _with_risk(
+                ok_result(bytes_written=len(data), backup_path=backup_path),
+                remote.risk,
+            )
 
         return await self._recorded_on_targets(
             "cluster_write_file",
@@ -342,7 +377,7 @@ class TaprootTools:
                             "size": int(attrs.size or 0),
                         }
                     )
-            return ok_result(entries=entries)
+            return _with_risk(ok_result(entries=entries), remote.risk)
 
         return await self._recorded_on_targets(
             "cluster_list_dir",
@@ -378,7 +413,7 @@ class TaprootTools:
             )
             result = await self.pool.run(node, command, timeout=60)
             if result.exit_status != 0 and not result.stdout:
-                return error_result(_command_detail(result, "find failed"))
+                return _with_risk(error_result(_command_detail(result, "find failed")), remote.risk)
 
             lines = [line for line in result.stdout.splitlines() if line]
             truncated = len(lines) > 200
@@ -402,7 +437,7 @@ class TaprootTools:
             payload = ok_result(matches=matches)
             if truncated:
                 payload["truncated"] = True
-            return payload
+            return _with_risk(payload, remote.risk)
 
         return await self._recorded_on_targets(
             "cluster_glob",
@@ -455,11 +490,12 @@ class TaprootTools:
         node_names = resolve_target(target, self.config.nodes)
         details = {"service": service, "action": action}
         if action != "status":
-            approval = self._require_approval("cluster_service", target, details)
-            if approval is not None:
-                return make_envelope(
-                    {node: self._approval_required_result(approval) for node in node_names}
-                )
+            details["_risk"] = _risk(
+                "danger",
+                "服务变更",
+                ["service_change"],
+                {"service": service, "action": action},
+            )
 
         async def status_op(node: str) -> dict[str, Any]:
             service_q = shlex.quote(service)
@@ -546,7 +582,7 @@ class TaprootTools:
                 )
                 if is_dir:
                     payload["files"] = file_count
-                return payload
+                return _with_risk(payload, remote.risk)
 
             tmp_dir = posixpath.join(remote.home, ".taproot", "tmp")
             tmp_path = posixpath.join(tmp_dir, f"taproot-upload-{uuid.uuid4().hex}-{local.name}")
@@ -575,7 +611,10 @@ class TaprootTools:
                     input_data = None
                 moved = await self.pool.run(node, move_final, input_data=input_data, timeout=60)
                 if moved.exit_status != 0:
-                    return error_result(_command_detail(moved, "failed to move upload into place"))
+                    return _with_risk(
+                        error_result(_command_detail(moved, "failed to move upload into place")),
+                        remote.risk,
+                    )
 
                 if mode_int is not None:
                     chmod = f"chmod {mode} {shlex.quote(remote.path)}"
@@ -587,7 +626,10 @@ class TaprootTools:
                         node, chmod, input_data=input_data, timeout=30
                     )
                     if chmod_result.exit_status != 0:
-                        return error_result(_command_detail(chmod_result, "failed to chmod upload"))
+                        return _with_risk(
+                            error_result(_command_detail(chmod_result, "failed to chmod upload")),
+                            remote.risk,
+                        )
             finally:
                 try:
                     await self.pool.run(node, f"rm -rf {shlex.quote(tmp_path)}", timeout=30)
@@ -604,7 +646,7 @@ class TaprootTools:
             )
             if is_dir:
                 payload["files"] = file_count
-            return payload
+            return _with_risk(payload, remote.risk)
 
         return await self._recorded_on_targets(
             "cluster_upload",
@@ -655,7 +697,7 @@ class TaprootTools:
             payload = ok_result(local_path=str(destination), bytes=total_bytes, sha256=digest)
             if is_dir:
                 payload["files"] = file_count
-            return payload
+            return _with_risk(payload, remote.risk)
 
         return await self._recorded_on_node_names(
             "cluster_download",
@@ -687,9 +729,12 @@ class TaprootTools:
         details = {"session_id": session_id, "command": command, "timeout": timeout}
         node = self.sessions.node_for_session(session_id)
         if node is not None:
-            approval = self._require_approval("cluster_session_exec", session_id, details)
-            if approval is not None:
-                return make_envelope({node: self._approval_required_result(approval)})
+            details["_risk"] = _risk(
+                "danger",
+                "会话命令",
+                ["session_exec"],
+                {"session_id": session_id, "command": command},
+            )
         envelope = await self.sessions.exec(session_id, command, timeout)
         self._record_envelope(
             "cluster_session_exec",
@@ -890,23 +935,6 @@ print(digest.hexdigest())
         result = await self.pool.run(node, command, input_data=input_data, timeout=30)
         return result.exit_status == 0
 
-    def _require_approval(
-        self, tool: str, target: str, details: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """Consume an approved operation or return/create a pending approval."""
-
-        if self.approvals.consume(tool, target, details) is not None:
-            return None
-        return self.approvals.request(tool, target, details)
-
-    def _approval_required_result(self, approval: dict[str, Any]) -> dict[str, Any]:
-        """Return a standard per-node approval-required result."""
-
-        return error_result(
-            "approval required: review the pending request in the Taproot dashboard",
-            approval_required=True,
-        )
-
     async def _authorize_remote_path(
         self,
         *,
@@ -924,19 +952,21 @@ print(digest.hexdigest())
         denied = self._denied_home_path(remote)
         if denied is not None:
             return error_result(denied)
-        if sudo or not remote.inside_home:
-            approval_details = {
-                **details,
-                "node": node,
-                "path": path,
-                "resolved_path": remote.path,
-                "access": access,
-                "sudo": sudo,
-            }
-            approval = self._require_approval(tool, node, approval_details)
-            if approval is not None:
-                return self._approval_required_result(approval)
-        return remote
+        risk = _remote_access_risk(
+            node=node,
+            path=path,
+            resolved_path=remote.path,
+            access=access,
+            sudo=sudo,
+            outside_home=not remote.inside_home,
+        )
+        return RemotePath(
+            original=remote.original,
+            path=remote.path,
+            home=remote.home,
+            inside_home=remote.inside_home,
+            risk=risk,
+        )
 
     async def _resolve_remote_path(self, node: str, path: str) -> RemotePath:
         """Resolve a remote path against the node home and nearest existing parent."""
@@ -1160,7 +1190,6 @@ for parsed, path in items:
             self.sessions.config = config
 
         self.config = config
-        self.approvals = ApprovalStore(config)
         self._home_cache.clear()
 
     def _node_inventory(self) -> dict[str, Any]:
@@ -1354,6 +1383,82 @@ def _expand_remote_user_path(path: str, home: str) -> str:
     if path.startswith("/"):
         return posixpath.normpath(path)
     return posixpath.normpath(posixpath.join(home, path))
+
+
+def _with_risk(result: dict[str, Any], risk: dict[str, Any] | None) -> dict[str, Any]:
+    """Attach audit risk metadata to a per-node result."""
+
+    if risk is not None:
+        result["risk"] = risk
+    return result
+
+
+def _risk(
+    level: str, label: str, reasons: list[str], context: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the small risk payload stored in operation history."""
+
+    return {
+        "level": level,
+        "label": label,
+        "reasons": reasons,
+        "context": context,
+    }
+
+
+def _remote_access_risk(
+    *,
+    node: str,
+    path: str,
+    resolved_path: str,
+    access: str,
+    sudo: bool,
+    outside_home: bool,
+) -> dict[str, Any] | None:
+    """Return audit risk for remote path access which used to require approval."""
+
+    reasons: list[str] = []
+    labels: list[str] = []
+    if outside_home:
+        reasons.append("outside_home")
+        labels.append("Home 外路径")
+    if sudo:
+        reasons.append("sudo")
+        labels.append("sudo")
+    if not reasons:
+        return None
+    return _risk(
+        "danger" if sudo else "warning",
+        " / ".join(labels),
+        reasons,
+        {
+            "node": node,
+            "path": path,
+            "resolved_path": resolved_path,
+            "access": access,
+            "sudo": sudo,
+        },
+    )
+
+
+def _cluster_exec_risk(command: str, sudo: bool) -> dict[str, Any] | None:
+    """Return audit risk for clearly dangerous shell commands."""
+
+    matches = ["sudo"] if sudo else []
+    for label, pattern in DANGEROUS_COMMAND_PATTERNS:
+        if pattern.search(command) and label not in matches:
+            matches.append(label)
+    if not matches:
+        return None
+    reasons = ["dangerous_command"]
+    if "sudo" in matches:
+        reasons.append("sudo")
+    return _risk(
+        "danger",
+        "危险命令",
+        reasons,
+        {"command": command, "sudo": sudo, "matches": matches},
+    )
 
 
 def _system_info_script() -> str:

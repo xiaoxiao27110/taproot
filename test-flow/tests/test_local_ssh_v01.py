@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from taproot_mcp.approvals import ApprovalStore
 from taproot_mcp.config import ClusterConfig, NodeConfig, load_config
 from taproot_mcp.server import TaprootTools
 
@@ -31,34 +30,17 @@ async def tools():
         await tools.aclose()
 
 
-def approve_result(config: ClusterConfig, result: dict, node: str) -> None:
-    assert result["results"][node]["approval_required"] is True
-    pending = ApprovalStore(config).list(status="pending")
-    assert pending
-    ApprovalStore(config).approve(pending[0]["id"])
-
-
 async def test_exec_targeting_and_stateless_cwd(tools: TaprootTools) -> None:
-    result = await tools.cluster_exec("tag:vllm", "printf vllm")
-    assert result["results"]["local-vllm"]["approval_required"] is True
-    approve_result(tools.config, result, "local-vllm")
-
     result = await tools.cluster_exec("tag:vllm", "printf vllm")
     assert result["summary"] == {"success": 1, "failed": 0, "total": 1}
     assert list(result["results"]) == ["local-vllm"]
     assert result["results"]["local-vllm"]["stdout"] == "vllm"
 
-    cd_result = await tools.cluster_exec("local-vllm", "cd /tmp")
-    approve_result(tools.config, cd_result, "local-vllm")
     await tools.cluster_exec("local-vllm", "cd /tmp")
 
     pwd = await tools.cluster_exec("local-vllm", "pwd")
-    approve_result(tools.config, pwd, "local-vllm")
-    pwd = await tools.cluster_exec("local-vllm", "pwd")
     assert pwd["results"]["local-vllm"]["stdout"].strip() != "/tmp"
 
-    cwd_pwd = await tools.cluster_exec("local-vllm", "pwd", cwd="/tmp")
-    approve_result(tools.config, cwd_pwd, "local-vllm")
     cwd_pwd = await tools.cluster_exec("local-vllm", "pwd", cwd="/tmp")
     assert cwd_pwd["results"]["local-vllm"]["stdout"].strip() == "/tmp"
 
@@ -124,7 +106,7 @@ async def test_upload_download_idempotent(tools: TaprootTools, tmp_path: Path) -
     assert uploaded_dir_again["results"]["local-vllm"]["skipped"] is True
 
 
-async def test_home_policy_blocks_sensitive_paths_and_prompts_outside_home(
+async def test_home_policy_blocks_sensitive_paths_and_marks_outside_home(
     tools: TaprootTools,
 ) -> None:
     denied = await tools.cluster_write_file("local-vllm", ".ssh/authorized_keys", "bad")
@@ -132,7 +114,9 @@ async def test_home_policy_blocks_sensitive_paths_and_prompts_outside_home(
     assert "protected home path" in denied["results"]["local-vllm"]["error"]
 
     outside = await tools.cluster_read_file("local-vllm", "/etc/passwd")
-    assert outside["results"]["local-vllm"]["approval_required"] is True
+    assert outside["results"]["local-vllm"]["ok"] is True
+    assert outside["results"]["local-vllm"]["risk"]["level"] == "warning"
+    assert "outside_home" in outside["results"]["local-vllm"]["risk"]["reasons"]
 
 
 async def test_backup_retention_prunes_by_count_and_age(tools: TaprootTools) -> None:

@@ -185,20 +185,10 @@ v0.2 单节点 tmux 会话工具：
 Taproot 在 MCP server 侧执行远程权限控制。本地 agent 的 sandbox 设置不会给远端节点额外授权。
 
 - 远程文件路径按 SSH 用户的物理 `$HOME` 解析。相对路径和 `~/...` 默认限制在该 home 目录内。
-- home 内部文件工具默认不需要 approval，但 `~/.ssh`、`~/.gnupg`、`~/.aws`、`~/.kube`、`~/.docker`、`~/.taproot` 等受保护目录除外。
-- home 外路径、`sudo=True`、`cluster_exec`、service 变更和 `cluster_session_exec` 都需要 Taproot approval 后才会执行。
-- VS Code dashboard 对待审批危险操作提供三个选择：允许一次、允许并记住匹配的后续请求、拒绝。
-- “允许并记住”匹配同一目标和保守规范化后的操作指纹。对于 shell 命令，目前只把空白差异视为同一请求。
-- CLI 修改 approval 默认禁用，避免 MCP client 按错误提示执行命令后自己审批自己。只有明确需要本地 override 时才设置 `TAPROOT_ENABLE_CLI_APPROVAL=1`。
-- 待审批记录存储在当前配置旁边的 `.taproot/approvals.json`。
-
-在终端中查看待审批操作：
-
-```bash
-taproot-mcp approvals list --config ./nodes.yaml --status pending
-```
-
-approval 队列是本地状态，不是对同一系统用户、且拥有任意 shell/文件写入能力 agent 的密码学隔离边界。
+- home 内部文件工具默认不弹额外确认，但 `~/.ssh`、`~/.gnupg`、`~/.aws`、`~/.kube`、`~/.docker`、`~/.taproot` 等受保护目录会直接拒绝。
+- home 外路径、`sudo=True`、service 变更、`cluster_session_exec` 和明显危险的 `cluster_exec` 命令会直接执行，同时在 history 中记录风险元数据。
+- VS Code dashboard 不再阻塞等待审批，而是在操作历史中用醒目颜色标识风险条目。
+- 旧的 approval 文件和 CLI 命令可能仍为兼容保留，但不属于正常执行路径。
 
 写入、编辑、上传操作的备份集中存放在每个远端节点：
 

@@ -6,7 +6,6 @@ import * as vscode from 'vscode';
 
 import { buildAgentPrompt } from './agentPrompt';
 import {
-  ApprovalDecision,
   DashboardState,
   defaultConfigPath,
   emptyState,
@@ -19,7 +18,6 @@ import {
   stateForSerialization,
   validateState,
 } from './configModel';
-import { loadPendingApprovals, updateApprovalDecision } from './approvalModel';
 import { summarizeProcessError } from './processError';
 import { isTcpPortOpen, waitForHttpServerReady } from './serverStartup';
 
@@ -27,8 +25,6 @@ interface WebviewMessage {
   type: string;
   state?: DashboardState;
   nodeName?: string;
-  approvalId?: string;
-  approvalDecision?: ApprovalDecision;
   command?: string;
   view?: 'config' | 'detail';
 }
@@ -402,9 +398,6 @@ class TaprootDashboard {
         case 'copySsh':
           await this.copySsh(requiredState(message), message.nodeName);
           break;
-        case 'approvalAction':
-          await this.handleApprovalAction(message);
-          break;
         case 'copyAgentPrompt':
           await this.copyAgentPrompt({ announce: false });
           break;
@@ -426,7 +419,7 @@ class TaprootDashboard {
         ...parseNodesYaml(text, configPath, backend),
         server,
         activities: await this.loadHistory(configPath),
-        approvals: await loadPendingApprovals(configPath),
+        approvals: [],
       };
       this.lastState = state;
       return state;
@@ -474,23 +467,6 @@ class TaprootDashboard {
     } catch {
       return [];
     }
-  }
-
-  private async handleApprovalAction(message: WebviewMessage): Promise<void> {
-    if (!message.approvalId || !message.approvalDecision) {
-      throw new Error('approvalAction requires approvalId and approvalDecision');
-    }
-    const configPath = this.resolveConfigPath();
-    const updated = await updateApprovalDecision(configPath, message.approvalId, message.approvalDecision);
-    const labels: Record<ApprovalDecision, string> = {
-      approve: '已允许一次',
-      remember: '已允许并记住本次选择',
-      reject: '已拒绝',
-    };
-    const state = await this.loadState();
-    await this.postState(state);
-    this.post({ type: 'toast', message: `${labels[message.approvalDecision]}: ${updated.id}` });
-    this.stateEmitter.fire();
   }
 
   private async saveConfig(rawState: DashboardState): Promise<void> {

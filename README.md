@@ -134,19 +134,10 @@ Single-node tmux session tools:
 - `password` and `sudo_password` in `nodes.yaml` are plaintext. Prefer SSH keys.
 - Do not commit `nodes.yaml`, `.taproot/`, history files, approval files, SSH keys, or VSIX files.
 - Taproot enforces remote permissions on the MCP server side.
-- Home-internal file tools run without approval, except protected directories such as `~/.ssh`, `~/.aws`, `~/.kube`, and `~/.taproot`.
-- Paths outside home, `sudo=True`, command execution, service mutations, and tmux command execution require Taproot approval.
-- The VS Code dashboard offers three decisions for pending high-risk operations: allow once, allow and remember matching future requests, or reject.
-- Remembered approvals match the same target and a conservative normalized operation fingerprint. For shell commands this currently treats whitespace-only command differences as the same request.
-- CLI approval changes are disabled by default so an MCP client cannot follow a returned command and approve itself. Set `TAPROOT_ENABLE_CLI_APPROVAL=1` only for an explicit local override.
-
-Inspect pending operations from a terminal:
-
-```bash
-taproot-mcp approvals list --config /absolute/path/to/nodes.yaml --status pending
-```
-
-The approval queue is local state, not a cryptographic boundary against an unrestricted same-user shell that can edit files directly.
+- Home-internal file tools run without extra prompts, except protected directories such as `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`, and `~/.taproot`, which are denied.
+- Paths outside home, `sudo=True`, service mutations, tmux command execution, and clearly dangerous shell commands are executed but recorded with risk metadata in history.
+- The VS Code dashboard highlights risky history entries instead of blocking for approval.
+- Legacy approval files and CLI commands may still exist for compatibility, but they are not part of the normal execution path.
 
 ## Development
 

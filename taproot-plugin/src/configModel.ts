@@ -45,6 +45,12 @@ export interface ActivityItem {
   ok: boolean;
   summary: string;
   detail: Record<string, unknown>;
+  risk?: {
+    level: 'warning' | 'danger';
+    label: string;
+    reasons: string[];
+    context: Record<string, unknown>;
+  };
   error?: string;
 }
 

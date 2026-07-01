@@ -8,10 +8,10 @@
 
 - 10 个 Docker SSH 节点可以一键启动、生成测试专用 `nodes.yaml`，并在测试后清理。
 - 后端 MCP 的 17 个工具全部覆盖正常、异常、广播/部分失败、权限拦截场景。
-- 高风险操作必须先返回 `approval_required`，批准后只放行一次，拒绝后不得执行远端动作。
+- 高风险操作直接执行，但必须写入 history risk 元数据并在 VS Code 历史列表中高亮。
 - MCP stdio 和 HTTP transport 都能完成工具发现、工具调用和 `taproot://nodes` resource 读取。
 - VS Code 插件能完成配置读写、节点连接检查、状态展示、历史展示、终端/复制 SSH 入口。
-- approval、history、前端状态、测试日志、容器日志都不得泄露 password、sudo_password、私钥、完整写入内容或 edit 字符串。
+- legacy approval、history、前端状态、测试日志、容器日志都不得泄露 password、sudo_password、私钥、完整写入内容或 edit 字符串。
 - 所有结果都使用统一 envelope；单节点失败不得导致整个广播工具调用崩溃。
 
 ## 2. Docker 测试节点矩阵
@@ -154,8 +154,8 @@
 - 0 次返回 `old_str was not found`。
 - 多次返回 `old_str is not unique`。
 - backup=false 不返回 backup_path。
-- sudo/outside-home 必须先 approval。
-- bad-sudo approval 后执行失败。
+- sudo/outside-home 直接执行并写入 risk。
+- bad-sudo 执行失败，失败 history 仍保留 risk。
 
 ### TC-BE-050 `cluster_list_dir`
 
@@ -303,41 +303,39 @@
 
 - open 成功返回 `session_id` 和 `tmux_session`。
 - no-tmux 和 unknown node 返回失败 envelope。
-- session_exec 必须先 approval。
+- session_exec 直接执行，并在 history 中标记为高风险。
 - cwd/env 在 session 内保留。
 - exit_code 解析正确。
 - timeout 后 read 能看到输出，interrupt 成功。
 - close 后远端 tmux 被清理，再次操作失败。
 
-## 4. Approval 权限测试用例
+## 4. Risk 审计测试用例
 
-### TC-APP-001 approval 生命周期
+### TC-RISK-001 legacy approval store 生命周期
 
 步骤：
 
-1. 触发一次 `cluster_exec`。
+1. 直接使用 `ApprovalStore.request()` 创建一条 legacy approval。
 2. 读取 pending approval。
-3. 重复触发相同操作。
+3. 重复 request 相同操作。
 4. approve。
-5. 再次触发相同操作。
-6. 再触发第三次相同操作。
-7. reject 一个 pending approval。
-8. reject 后再次触发。
+5. consume 相同操作。
+6. 再次 consume 相同操作。
+7. 创建并 reject 一个 pending approval。
 
 通过标准：
 
 - 第一次创建 pending。
 - 第二次复用同一个 pending id。
-- approve 后下一次执行成功且 approval 状态变 consumed。
-- consumed 不可复用，第三次重新需要 approval。
-- reject 后不执行远端动作。
-- reject 后再次触发产生新的 pending。
+- approve 后 consume 成功且 approval 状态变 consumed。
+- consumed 不可复用。
+- reject 后状态为 rejected。
 
-### TC-APP-002 approval 触发面
+### TC-RISK-002 risk 触发面
 
 必须覆盖：
 
-- `cluster_exec`
+- 明显危险的 `cluster_exec`
 - `cluster_service` start/stop/restart
 - `cluster_session_exec`
 - 文件工具 sudo=true
@@ -345,21 +343,22 @@
 
 通过标准：
 
-- 上述场景全部返回 `approval_required=true`。
-- protected home path 不走 approval，而是直接 denied。
+- 上述场景直接执行，并在对应 history event 顶层写入 `risk`。
+- 普通 `cluster_exec` 不写入 `risk`。
+- protected home path 直接 denied，不写入 allow 风险。
 
-### TC-APP-003 approval 脱敏
+### TC-RISK-003 risk/history 脱敏
 
 步骤：
 
-1. 使用包含 password、sudo_password、content、old_str、new_str 的操作触发 approval。
-2. 调 CLI `taproot-mcp approvals list`。
-3. 扫描 approval JSON。
+1. 使用包含 password、sudo_password、content、old_str、new_str 的操作触发 history 记录。
+2. 调 CLI `taproot-mcp history`。
+3. 扫描 history JSONL 和 dashboard state。
 
 通过标准：
 
-- approval details 不包含敏感字段。
-- approval error 中不包含密码或完整写入内容。
+- history detail/risk context 不包含密码或 edit 原文。
+- error 中不包含密码或完整写入内容。
 
 ## 5. History 测试用例
 

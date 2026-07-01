@@ -1223,108 +1223,6 @@ h1 {
   gap: 10px;
 }
 
-.approval-panel {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--yellow) 38%, var(--card-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--yellow) 9%, var(--panel));
-}
-
-.approval-panel-head {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.approval-panel-head > .codicon {
-  margin-top: 2px;
-  color: var(--yellow);
-  font-size: 18px;
-}
-
-.approval-panel h2 {
-  margin: 0;
-  font-size: 13px;
-}
-
-.approval-panel p {
-  margin: 3px 0 0;
-  color: var(--fg-muted);
-  font-size: 12px;
-}
-
-.approval-list {
-  display: grid;
-  gap: 8px;
-}
-
-.approval-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 10px;
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  background: var(--card-bg);
-}
-
-.approval-main {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-
-.approval-title {
-  min-width: 0;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.approval-title strong {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.approval-kind {
-  flex: 0 0 auto;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--chip-bg);
-  color: var(--chip-fg);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.approval-meta,
-.approval-detail {
-  overflow: hidden;
-  color: var(--fg-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.approval-meta {
-  display: flex;
-  gap: 10px;
-}
-
-.approval-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
 .detail-empty-results {
   min-height: 160px;
   display: flex;
@@ -1467,6 +1365,14 @@ h1 {
   background: color-mix(in srgb, var(--red) 6%, transparent);
 }
 
+.activity-item.risk-warning {
+  background: color-mix(in srgb, var(--yellow) 7%, transparent);
+}
+
+.activity-item.risk-danger {
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
 .activity-summary {
   position: relative;
   width: 100%;
@@ -1500,6 +1406,25 @@ h1 {
   background: color-mix(in srgb, var(--red) 70%, var(--divider));
 }
 
+.activity-item.risk-warning .activity-summary::before {
+  width: 3px;
+  background: color-mix(in srgb, var(--yellow) 82%, var(--divider));
+}
+
+.activity-item.risk-danger .activity-summary::before {
+  width: 3px;
+  background: color-mix(in srgb, var(--red) 82%, var(--divider));
+}
+
+.activity-item.failed.risk-warning,
+.activity-item.failed.risk-danger {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
+.activity-item.failed .activity-summary::before {
+  background: color-mix(in srgb, var(--red) 78%, var(--divider));
+}
+
 .activity-summary:hover {
   background: color-mix(in srgb, var(--list-hover) 72%, transparent);
 }
@@ -1528,6 +1453,14 @@ h1 {
 
 .activity-icon.muted {
   color: var(--fg-muted);
+}
+
+.activity-item.risk-warning .activity-icon {
+  color: var(--yellow);
+}
+
+.activity-item.risk-danger .activity-icon {
+  color: var(--red);
 }
 
 .activity-copy {
@@ -1562,6 +1495,27 @@ h1 {
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.activity-risk {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.activity-risk-warning {
+  border: 1px solid color-mix(in srgb, var(--yellow) 50%, transparent);
+  background: color-mix(in srgb, var(--yellow) 16%, var(--card-bg));
+  color: color-mix(in srgb, var(--yellow) 84%, var(--fg));
+}
+
+.activity-risk-danger {
+  border: 1px solid color-mix(in srgb, var(--red) 52%, transparent);
+  background: color-mix(in srgb, var(--red) 16%, var(--card-bg));
+  color: color-mix(in srgb, var(--red) 86%, var(--fg));
 }
 
 .activity-fail {
@@ -1912,14 +1866,6 @@ h1 {
   .detail-node-count,
   .detail-node-state {
     grid-column: 2;
-  }
-
-  .approval-item {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .approval-actions {
-    justify-content: flex-start;
   }
 
   .activity-summary {

@@ -408,18 +408,41 @@
     }
     return activities
       .filter((item) => item && item.summary)
-      .map((item) => ({
-        id: item.id || `${item.timestamp || Date.now()}-${Math.random().toString(16).slice(2)}`,
-        node: item.node || '',
-        tool: item.tool || '',
-        action: item.action || 'operation',
-        ok: item.ok !== false,
-        summary: item.summary || item.tool || '操作',
-        detail: item.detail && typeof item.detail === 'object' ? item.detail : {},
-        error: item.error || '',
-        timestamp: item.timestamp || '',
-      }))
+      .map((item) => {
+        const activity = {
+          id: item.id || `${item.timestamp || Date.now()}-${Math.random().toString(16).slice(2)}`,
+          node: item.node || '',
+          tool: item.tool || '',
+          action: item.action || 'operation',
+          ok: item.ok !== false,
+          summary: item.summary || item.tool || '操作',
+          detail: item.detail && typeof item.detail === 'object' ? item.detail : {},
+          error: item.error || '',
+          timestamp: item.timestamp || '',
+        };
+        const risk = normalizeRisk(item.risk);
+        if (risk) {
+          activity.risk = risk;
+        }
+        return activity;
+      })
       .slice(0, 200);
+  }
+
+  function normalizeRisk(risk) {
+    if (!risk || typeof risk !== 'object') {
+      return null;
+    }
+    const level = risk.level === 'danger' ? 'danger' : risk.level === 'warning' ? 'warning' : '';
+    if (!level) {
+      return null;
+    }
+    return {
+      level,
+      label: String(risk.label || (level === 'danger' ? '高风险' : '需留意')),
+      reasons: Array.isArray(risk.reasons) ? risk.reasons.map(String).filter(Boolean) : [],
+      context: risk.context && typeof risk.context === 'object' ? risk.context : {},
+    };
   }
 
   function normalizeApprovals(approvals) {
@@ -493,14 +516,6 @@
 	        }
 	        break;
 	      }
-      case 'approvalAction': {
-        const approvalId = el.getAttribute('data-id') || '';
-        const approvalDecision = el.getAttribute('data-decision') || '';
-        if (approvalId && approvalDecision) {
-          vscode.postMessage({ type: 'approvalAction', approvalId, approvalDecision });
-        }
-        break;
-      }
       case 'expandAllDetailNodes':
         setAllDetailNodesOpen(true);
         break;
@@ -1014,100 +1029,11 @@
             <span>刷新</span>
           </button>
         </div>
-        ${renderApprovalQueue()}
         <div class="detail-stack" data-detail-stack>
           ${nodes.length ? nodes.map(renderDetailNodePanel).join('') : renderDetailNoResults()}
         </div>
       </section>
     `;
-  }
-
-  function renderApprovalQueue() {
-    const approvals = state.approvals || [];
-    if (!approvals.length) {
-      return '';
-    }
-    return `
-      <section class="approval-panel" aria-label="待审批危险操作">
-        <div class="approval-panel-head">
-          <span class="codicon codicon-shield"></span>
-          <div>
-            <h2>待审批危险操作</h2>
-            <p>这些请求需要你明确批准后才会执行。</p>
-          </div>
-        </div>
-        <div class="approval-list">
-          ${approvals.map(renderApprovalItem).join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  function renderApprovalItem(item) {
-    const detail = approvalDetail(item);
-    return `
-      <article class="approval-item" data-approval-id="${escAttr(item.id)}">
-        <div class="approval-main">
-          <div class="approval-title">
-            <span class="approval-kind">${esc(approvalKindLabel(item))}</span>
-            <strong>${esc(approvalSubject(item))}</strong>
-          </div>
-          <div class="approval-meta">
-            <span>ID ${esc(item.id)}</span>
-            <span>目标 ${esc(item.target || '-')}</span>
-            ${item.created_at ? `<span>${esc(formatActivityTime(item.created_at))}</span>` : ''}
-          </div>
-          ${detail ? `<div class="approval-detail">${esc(detail)}</div>` : ''}
-        </div>
-        <div class="approval-actions">
-          <button class="button secondary compact" data-action="approvalAction" data-decision="reject" data-id="${escAttr(item.id)}">
-            <span class="codicon codicon-close"></span><span>拒绝</span>
-          </button>
-          <button class="button secondary compact" data-action="approvalAction" data-decision="approve" data-id="${escAttr(item.id)}">
-            <span class="codicon codicon-check"></span><span>允许一次</span>
-          </button>
-          <button class="button primary compact" data-action="approvalAction" data-decision="remember" data-id="${escAttr(item.id)}">
-            <span class="codicon codicon-save"></span><span>允许并记住</span>
-          </button>
-        </div>
-      </article>
-    `;
-  }
-
-  function approvalKindLabel(item) {
-    return activityKindLabel({ tool: item.tool, action: 'operation' }) || '危险操作';
-  }
-
-  function approvalSubject(item) {
-    const detail = item.details || {};
-    const subject = activitySubjectFromDetail({ tool: item.tool }, detail) || item.tool || '待审批请求';
-    return truncateActivitySubject(subject);
-  }
-
-  function approvalDetail(item) {
-    const detail = item.details || {};
-    const parts = [];
-    for (const key of ['access', 'path', 'resolved_path', 'cwd', 'service', 'action', 'sudo', 'content_sha256', 'old_str_sha256', 'new_str_sha256']) {
-      if (detail[key] !== undefined && detail[key] !== null && detail[key] !== '') {
-        parts.push(`${approvalDetailLabel(key)}: ${detail[key]}`);
-      }
-    }
-    return parts.join(' · ');
-  }
-
-  function approvalDetailLabel(key) {
-    return {
-      access: '访问',
-      path: '路径',
-      resolved_path: '解析路径',
-      cwd: '工作目录',
-      service: '服务',
-      action: '动作',
-      sudo: 'sudo',
-      content_sha256: '内容指纹',
-      old_str_sha256: '旧内容指纹',
-      new_str_sha256: '新内容指纹',
-    }[key] || key;
   }
 
   function renderDetailFilterMenu() {
@@ -1220,14 +1146,17 @@
     const open = !!state.activityOpen[item.id];
     const label = activityTitleLabel(item);
     const subject = open ? '' : activitySubject(item);
+    const risk = activityRisk(item);
+    const riskClass = risk ? `risk-${risk.level}` : '';
     return `
-      <article class="activity-item ${item.ok ? '' : 'failed'} ${open ? 'open' : ''}" data-activity-id="${escAttr(item.id)}">
+      <article class="activity-item ${item.ok ? '' : 'failed'} ${open ? 'open' : ''} ${riskClass}" data-activity-id="${escAttr(item.id)}">
         <button class="activity-summary" data-action="toggleActivity" data-id="${escAttr(item.id)}">
           <span class="codicon ${meta.icon} activity-icon ${meta.tone}"></span>
           <span class="activity-copy">
             <span class="activity-title">
               <span class="activity-title-label">${esc(label)}</span>
               ${subject ? `<span class="activity-title-text">${esc(subject)}</span>` : ''}
+              ${risk ? `<span class="activity-risk activity-risk-${escAttr(risk.level)}">${esc(risk.label)}</span>` : ''}
               ${item.ok ? '' : '<span class="activity-fail">失败</span>'}
             </span>
           </span>
@@ -1237,6 +1166,14 @@
         ${open ? renderActivityExpanded(item) : ''}
       </article>
     `;
+  }
+
+  function activityRisk(item) {
+    const risk = item && item.risk;
+    if (!risk || (risk.level !== 'warning' && risk.level !== 'danger')) {
+      return null;
+    }
+    return risk;
   }
 
   function activityTitleLabel(item) {
@@ -1345,6 +1282,11 @@
   function activityExpandedRows(item) {
     const detail = item.detail || {};
     const rows = [];
+    const risk = activityRisk(item);
+    if (risk) {
+      const reasons = risk.reasons && risk.reasons.length ? ` · ${risk.reasons.join(', ')}` : '';
+      rows.push(['风险标记', `${risk.label}${reasons}`]);
+    }
     const keys = [
       ['command', '命令'],
       ['cwd', '工作目录'],
@@ -1703,6 +1645,12 @@
           ok: true,
           summary: '写入文件: 1.txt',
           detail: { path: '1.txt', bytes: 3, content_preview: 'hi\n', content_truncated: false },
+          risk: {
+            level: 'warning',
+            label: 'Home 外路径',
+            reasons: ['outside_home'],
+            context: { path: '/data/1.txt', resolved_path: '/data/1.txt', access: 'write' },
+          },
         },
         {
           id: 'mock-exec-1',
@@ -1713,6 +1661,22 @@
           ok: true,
           summary: '执行 bash: nvidia-smi -L',
           detail: { command: 'nvidia-smi -L' },
+        },
+        {
+          id: 'mock-danger-1',
+          timestamp: '2026-06-19T12:01:00.000Z',
+          node: 'gpu-node-2',
+          tool: 'cluster_exec',
+          action: 'exec',
+          ok: true,
+          summary: '执行 bash: sudo systemctl restart docker',
+          detail: { command: 'sudo systemctl restart docker', sudo: true },
+          risk: {
+            level: 'danger',
+            label: '危险命令',
+            reasons: ['dangerous_command', 'sudo'],
+            context: { command: 'sudo systemctl restart docker', sudo: true },
+          },
         },
       ],
       approvals: [

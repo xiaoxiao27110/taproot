@@ -34,9 +34,10 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.match(css, /\.activity-summary\s*\{[\s\S]*?min-height:\s*52px/);
   assert.match(css, /\.activity-title-text\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
   assert.doesNotMatch(css, /\.activity-detail\b/);
-  assert.match(css, /\.approval-panel\b/);
-  assert.match(css, /\.approval-item\b/);
-  assert.match(css, /\.approval-actions\b/);
+  assert.match(css, /\.activity-item\.risk-warning\b/);
+  assert.match(css, /\.activity-item\.risk-danger\b/);
+  assert.match(css, /\.activity-risk-danger\b/);
+  assert.doesNotMatch(css, /\.approval-panel\b/);
   assert.doesNotMatch(css, /\.agent-setup\b/);
   assert.doesNotMatch(css, /\.agent-setup-actions\b/);
   assert.doesNotMatch(css, /\.agent-setup-row code\b/);
@@ -62,8 +63,6 @@ test('dashboard webview renders as a real extension surface and supports core in
     type?: string;
     nodeName?: string;
     state?: any;
-    approvalId?: string;
-    approvalDecision?: string;
   }> = [];
   const originalLog = dom.window.console.log.bind(dom.window.console);
   dom.window.console.log = (...args: unknown[]) => {
@@ -86,21 +85,14 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert.equal(dom.window.document.querySelector('.node-preview'), null);
   assert.equal(dom.window.document.querySelectorAll('[data-detail-node]').length, 4);
   assert.equal(dom.window.document.querySelectorAll('[data-node-row]').length, 4);
-  assert.match(dom.window.document.body.textContent || '', /待审批危险操作/);
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /待审批危险操作/);
   assert.doesNotMatch(dom.window.document.body.textContent || '', /安装后端，然后复制提示词给你的 Agent/);
   assert.doesNotMatch(dom.window.document.body.textContent || '', /复制 Agent 提示词/);
   assert.doesNotMatch(dom.window.document.body.textContent || '', /安装\/更新后端/);
-  assert.match(dom.window.document.body.textContent || '', /允许一次/);
-  assert.match(dom.window.document.body.textContent || '', /允许并记住/);
-  assert.match(dom.window.document.body.textContent || '', /拒绝/);
-  assert(dom.window.document.querySelector('[data-approval-id="appr-build-1"]'));
-  const approvalMessagesBefore = postedMessages.filter((item) => item.type === 'approvalAction').length;
-  click(dom, '[data-approval-id="appr-build-1"] [data-decision="remember"]');
-  const approvalMessages = postedMessages.filter((item) => item.type === 'approvalAction');
-  assert.equal(approvalMessages.length, approvalMessagesBefore + 1);
-  const approvalMessage = approvalMessages.at(-1);
-  assert.equal(approvalMessage?.approvalId, 'appr-build-1');
-  assert.equal(approvalMessage?.approvalDecision, 'remember');
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /允许一次/);
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /允许并记住/);
+  assert.doesNotMatch(dom.window.document.body.textContent || '', /拒绝/);
+  assert.equal(dom.window.document.querySelector('[data-approval-id="appr-build-1"]'), null);
   assert.equal(dom.window.document.querySelector('.titlebar'), null);
   assert.equal(dom.window.document.querySelector('.activitybar'), null);
   assert.equal(dom.window.document.querySelector('.sidebar'), null);
@@ -223,6 +215,12 @@ test('dashboard webview renders as a real extension surface and supports core in
   assert(expandedWrite);
   assert.match(expandedWrite.textContent || '', /写入内容/);
   assert.match(expandedWrite.textContent || '', /hi/);
+  assert(expandedWrite.classList.contains('risk-warning'));
+  assert.match(expandedWrite.textContent || '', /Home 外路径/);
+  const dangerousActivity = dom.window.document.querySelector<HTMLElement>('[data-activity-id="mock-danger-1"]');
+  assert(dangerousActivity);
+  assert(dangerousActivity.classList.contains('risk-danger'));
+  assert.match(dangerousActivity.textContent || '', /危险命令/);
   assert.equal(dom.window.document.querySelector('[data-action="recordUpload"]'), null);
   assert.equal(dom.window.document.querySelector('[data-action="recordDownload"]'), null);
 

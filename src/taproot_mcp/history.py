@@ -35,6 +35,7 @@ def append_tool_history(
     path = default_history_path(config)
     timestamp = datetime.now(timezone.utc).isoformat()
     safe_details = _safe_details(details)
+    default_risk = _safe_risk(details.get("_risk"))
     events = []
     for node, result in envelope.get("results", {}).items():
         if node not in config.nodes:
@@ -54,6 +55,9 @@ def append_tool_history(
             "summary": _summary_for_tool(tool, safe_details),
             "detail": detail,
         }
+        risk = _safe_risk(result.get("risk")) or default_risk
+        if risk is not None:
+            event["risk"] = risk
         if not ok and result.get("error"):
             event["error"] = str(result["error"])
         events.append(event)
@@ -105,6 +109,8 @@ def read_history(
 def _safe_details(details: dict[str, Any]) -> dict[str, Any]:
     safe: dict[str, Any] = {}
     for key, value in details.items():
+        if key.startswith("_") or key == "risk":
+            continue
         if key in SENSITIVE_KEYS:
             continue
         if key == "content":
@@ -114,6 +120,25 @@ def _safe_details(details: dict[str, Any]) -> dict[str, Any]:
             continue
         safe[key] = value
     return safe
+
+
+def _safe_risk(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    level = value.get("level")
+    if level not in {"warning", "danger"}:
+        return None
+    label = str(value.get("label") or ("高风险" if level == "danger" else "需留意"))
+    raw_reasons = value.get("reasons")
+    reasons = [str(item) for item in raw_reasons if item] if isinstance(raw_reasons, list) else []
+    raw_context = value.get("context")
+    context = _safe_details(raw_context) if isinstance(raw_context, dict) else {}
+    return {
+        "level": level,
+        "label": label,
+        "reasons": reasons,
+        "context": context,
+    }
 
 
 def _action_for_tool(tool: str) -> str:

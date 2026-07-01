@@ -3,7 +3,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from taproot_mcp.approvals import ApprovalStore
 from taproot_mcp.config import ClusterConfig, NodeConfig
 from taproot_mcp.history import read_history
 from taproot_mcp.server import TaprootTools
@@ -37,17 +36,9 @@ async def test_cluster_exec_writes_per_node_history(tmp_path: Path) -> None:
     pool = FakePool()
     tools = TaprootTools(config, pool=pool)  # type: ignore[arg-type]
 
-    result = await tools.cluster_exec("local-*", "echo ok", sudo=True, sudo_password="secret")
-    assert result["summary"] == {"success": 0, "failed": 2, "total": 2}
-    assert result["results"]["local-a"]["approval_required"] is True
-    assert "approval_id" not in result["results"]["local-a"]
-    assert pool.calls == 0
-    pending = ApprovalStore(config).list(status="pending")
-    assert pending
-    ApprovalStore(config).approve(pending[0]["id"])
-
-    result = await tools.cluster_exec("local-*", "echo ok", sudo=True, sudo_password="secret")
+    result = await tools.cluster_exec("local-*", "echo ok")
     assert result["summary"] == {"success": 2, "failed": 0, "total": 2}
+    assert pool.calls == 2
     local_a = read_history(config, node="local-a")
     local_b = read_history(config, node="local-b")
 
@@ -57,7 +48,23 @@ async def test_cluster_exec_writes_per_node_history(tmp_path: Path) -> None:
     assert local_a[0]["action"] == "exec"
     assert local_a[0]["summary"] == "执行 bash: echo ok"
     assert local_a[0]["detail"]["command"] == "echo ok"
+    assert "risk" not in local_a[0]
+
+    sudo_result = await tools.cluster_exec(
+        "local-a", "echo ok", sudo=True, sudo_password="secret"
+    )
+    assert sudo_result["summary"] == {"success": 1, "failed": 0, "total": 1}
+    local_a = read_history(config, node="local-a")
+    assert local_a[0]["risk"]["level"] == "danger"
+    assert local_a[0]["risk"]["label"] == "危险命令"
+    assert "sudo" in local_a[0]["risk"]["reasons"]
     assert "sudo_password" not in local_a[0]["detail"]
+
+    dangerous_result = await tools.cluster_exec("local-b", "rm -rf /tmp/taproot-risk")
+    assert dangerous_result["summary"] == {"success": 1, "failed": 0, "total": 1}
+    local_b = read_history(config, node="local-b")
+    assert local_b[0]["risk"]["level"] == "danger"
+    assert "dangerous_command" in local_b[0]["risk"]["reasons"]
 
 
 async def test_write_file_history_records_content_preview(tmp_path: Path) -> None:
@@ -74,7 +81,22 @@ async def test_write_file_history_records_content_preview(tmp_path: Path) -> Non
         "local",
         {"path": "/tmp/config.yaml", "content": "secret text", "bytes": 11},
         {
-            "results": {"local": {"ok": True, "backup_path": "~/.taproot/backups/hash/file"}},
+            "results": {
+                "local": {
+                    "ok": True,
+                    "backup_path": "~/.taproot/backups/hash/file",
+                    "risk": {
+                        "level": "warning",
+                        "label": "Home 外路径",
+                        "reasons": ["outside_home"],
+                        "context": {
+                            "path": "/tmp/config.yaml",
+                            "resolved_path": "/tmp/config.yaml",
+                            "access": "write",
+                        },
+                    },
+                }
+            },
             "summary": {"success": 1, "failed": 0, "total": 1},
         },
     )
@@ -87,3 +109,7 @@ async def test_write_file_history_records_content_preview(tmp_path: Path) -> Non
     assert event["detail"]["content_preview"] == "secret text"
     assert event["detail"]["content_truncated"] is False
     assert event["detail"]["backup_path"] == "~/.taproot/backups/hash/file"
+    assert "risk" not in event["detail"]
+    assert event["risk"]["level"] == "warning"
+    assert event["risk"]["label"] == "Home 外路径"
+    assert event["risk"]["context"]["access"] == "write"

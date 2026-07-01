@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from taproot_mcp.approvals import ApprovalStore
 from taproot_mcp.config import load_config
 from taproot_mcp.server import TaprootTools
 
@@ -27,15 +26,9 @@ async def tools():
         await tools.aclose()
 
 
-async def approved_session_exec(
+async def session_exec(
     tools: TaprootTools, session_id: str, command: str, timeout: int = 60
 ) -> dict:
-    pending = await tools.cluster_session_exec(session_id, command, timeout)
-    node = next(iter(pending["results"]))
-    assert pending["results"][node]["approval_required"] is True
-    approvals = ApprovalStore(tools.config).list(status="pending")
-    assert approvals
-    ApprovalStore(tools.config).approve(approvals[0]["id"])
     return await tools.cluster_session_exec(session_id, command, timeout)
 
 
@@ -45,13 +38,13 @@ async def test_tmux_session_preserves_state_and_exit_code(tools: TaprootTools) -
     session_id = opened["results"]["local-vllm"]["session_id"]
 
     try:
-        first = await approved_session_exec(
+        first = await session_exec(
             tools,
             session_id, "cd /tmp && export TAPROOT_SESSION_TEST=ok"
         )
         assert first["results"]["local-vllm"]["exit_code"] == 0
 
-        second = await approved_session_exec(
+        second = await session_exec(
             tools,
             session_id, "pwd; printf \"env=$TAPROOT_SESSION_TEST\""
         )
@@ -59,7 +52,7 @@ async def test_tmux_session_preserves_state_and_exit_code(tools: TaprootTools) -
         assert "/tmp" in output
         assert "env=ok" in output
 
-        failed = await approved_session_exec(tools, session_id, "sh -c 'exit 7'")
+        failed = await session_exec(tools, session_id, "sh -c 'exit 7'")
         assert failed["results"]["local-vllm"]["exit_code"] == 7
     finally:
         closed = await tools.cluster_session_close(session_id)
@@ -77,7 +70,7 @@ async def test_tmux_session_read_interrupt_and_list(tools: TaprootTools) -> None
             for item in listed["results"]["sessions"]["sessions"]
         )
 
-        long_running = await approved_session_exec(
+        long_running = await session_exec(
             tools,
             session_id, "while true; do echo tick; sleep 1; done", timeout=1
         )
