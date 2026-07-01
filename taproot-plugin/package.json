@@ -2,7 +2,7 @@
   "name": "taproot-mcp",
   "displayName": "taproot-mcp",
   "description": "Fleet-level MCP dashboard for SSH clusters: edit nodes.yaml and check taproot-mcp connectivity.",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "publisher": "xiaoxiao27110",
   "license": "SEE LICENSE IN LICENSE",
   "preview": true,
