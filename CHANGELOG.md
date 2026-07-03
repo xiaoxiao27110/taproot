@@ -2,6 +2,11 @@
 
 All notable changes to Taproot are documented here.
 
+## 0.2.3 - 2026-07-03
+
+- Released the non-blocking risk audit backend under a new package version so upgrades replace approval-gated 0.2.2 installs.
+- Updated the bundled VS Code backend wheel for the corresponding extension release.
+
 ## 0.2.2 - 2026-06-24
 
 - Added schema-only `taproot-mcp validate` for extension startup checks.

@@ -19,7 +19,7 @@ Taproot runs on the same machine as the agent that connects to it. In a Remote-S
 CLI-only install, without VS Code:
 
 ```bash
-python -m pip install https://github.com/xiaoxiao27110/taproot/releases/download/v0.2.2/taproot_mcp-0.2.2-py3-none-any.whl
+python -m pip install https://github.com/xiaoxiao27110/taproot/releases/download/v0.2.3/taproot_mcp-0.2.3-py3-none-any.whl
 ```
 
 ### 2. Copy the setup prompt into your agent

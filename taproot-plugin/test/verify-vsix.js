@@ -27,7 +27,7 @@ const requiredEntries = [
   'extension/media/icon.png',
   'extension/media/taproot-icons.woff',
   'extension/media/taproot-status.svg',
-  'extension/backend/taproot_mcp-0.2.2-py3-none-any.whl',
+  'extension/backend/taproot_mcp-0.2.3-py3-none-any.whl',
   'extension/node_modules/js-yaml/package.json',
   'extension/node_modules/argparse/package.json',
   'extension/node_modules/@vscode/codicons/dist/codicon.css',
