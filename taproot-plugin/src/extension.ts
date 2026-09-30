@@ -521,8 +521,19 @@ class TaprootDashboard {
 
     try {
       const command = this.taprootCommand();
-      const output = await runProcess(command, ['check', '--config', tmpConfig], 45_000);
-      const statuses = parseCheckOutput(output.stdout + output.stderr);
+      // taproot-mcp check exits 1 when any node fails, but still prints per-node results.
+      let checkOutput: string;
+      try {
+        const output = await runProcess(command, ['check', '--config', tmpConfig], 45_000);
+        checkOutput = output.stdout + output.stderr;
+      } catch (error) {
+        if (error instanceof ProcessExitError && parseCheckOutput(error.stdout + error.stderr).size > 0) {
+          checkOutput = error.stdout + error.stderr;
+        } else {
+          throw error;
+        }
+      }
+      const statuses = parseCheckOutput(checkOutput);
       const nodes = state.nodes.map((node) => {
         if (nodeName && node.name !== nodeName) {
           return node;
@@ -851,6 +862,18 @@ function findNode(state: DashboardState, nodeName: string | undefined) {
   return state.nodes.find((node) => node.name === nodeName) ?? state.nodes[0];
 }
 
+class ProcessExitError extends Error {
+  constructor(
+    message: string,
+    readonly code: number | null,
+    readonly stdout: string,
+    readonly stderr: string,
+  ) {
+    super(message);
+    this.name = 'ProcessExitError';
+  }
+}
+
 function runProcess(command: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = cp.spawn(command, args, {
@@ -879,7 +902,7 @@ function runProcess(command: string, args: string[], timeoutMs: number): Promise
       if (code === 0) {
         resolve({ stdout, stderr });
       } else {
-        reject(new Error((stderr || stdout || `${command} exited ${code}`).trim()));
+        reject(new ProcessExitError((stderr || stdout || `${command} exited ${code}`).trim(), code, stdout, stderr));
       }
     });
   });
@@ -974,7 +997,7 @@ function statusThemeIcon(status: DashboardState['nodes'][number]['status']): vsc
     case 'warn':
       return new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.yellow'));
     case 'error':
-      return new vscode.ThemeIcon('error', new vscode.ThemeColor('charts.red'));
+      return new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('disabledForeground'));
     case 'checking':
       return new vscode.ThemeIcon('sync', new vscode.ThemeColor('charts.blue'));
     case 'inactive':
